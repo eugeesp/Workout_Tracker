@@ -417,12 +417,22 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
 // Componente
 // =======================
 
-const STORAGE_DONE = "rg-done-v1" as const;
+const STORAGE_DONE = "rg-done-v1" as const; // peso/reps reales por ejercicio
 
 const RutinaGym: React.FC = () => {
   const [done, setDone] = useState<Record<string, boolean>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_DONE);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [logs, setLogs] = useState<
+    Record<string, { peso?: string; reps?: string }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_LOGS);
       return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
@@ -442,6 +452,12 @@ const RutinaGym: React.FC = () => {
       localStorage.setItem(STORAGE_DONE, JSON.stringify(done));
     } catch {}
   }, [done]);
+  // Persistencia de logs (peso/reps)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_LOGS, JSON.stringify(logs));
+    } catch {}
+  }, [logs]);
 
   // Añadimos IDs únicas por día
   const rutinaConIds = useMemo(() => {
