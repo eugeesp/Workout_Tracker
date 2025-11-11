@@ -2,6 +2,63 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Download, Info, Printer, BarChart3 } from "lucide-react";
 
 // =======================
+// IndexedDB Helper (para persistencia confiable en iOS)
+// =======================
+
+const DB_NAME = "RutinaGymDB";
+const DB_VERSION = 1;
+const STORE_NAME = "workoutData";
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const getFromDB = async (key: string): Promise<any> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readonly");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(key);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("Error reading from IndexedDB:", error);
+    return null;
+  }
+};
+
+const saveToDB = async (key: string, value: any): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.put(value, key);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("Error saving to IndexedDB:", error);
+  }
+};
+
+// =======================
 // Tipos
 // =======================
 
@@ -17,7 +74,7 @@ type Grupo =
 type Series = number | `${number}-${number}`;
 
 interface Ejercicio {
-  id?: string; // se genera si no viene
+  id?: string;
   nombre: string;
   series: Series;
   reps: string;
@@ -30,6 +87,20 @@ interface Ejercicio {
 interface DiaRutina {
   nombre: string;
   ejercicios: Ejercicio[];
+}
+
+interface SessionExercise {
+  sets: Array<{ peso?: string; reps?: string }>;
+  alt?: string;
+  completed: boolean;
+}
+
+interface WorkoutSession {
+  date: string;
+  day: keyof typeof rutina;
+  exercises: Record<string, SessionExercise>;
+  totalVolume: number;
+  duration?: number;
 }
 
 // =======================
@@ -417,65 +488,91 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
 // Componente
 // =======================
 
-const STORAGE_DONE = "rg-done-v1" as const;
-const STORAGE_LOGS = "rg-logs-v1" as const; // peso/reps reales por ejercicio
+const STORAGE_HISTORY = "rg-history-v2" as const;
+const STORAGE_CURRENT = "rg-current-v2" as const;
 
 const RutinaGym: React.FC = () => {
-  const [done, setDone] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_DONE);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState<WorkoutSession[]>([]);
+
+  const [done, setDone] = useState<Record<string, boolean>>({});
   
-  // Ahora las entradas guardan "sets" (array de series) y "alt" (nombre alternativo)
   const [logs, setLogs] = useState<
-    Record<
-      string,
-      | { peso?: string; reps?: string } // compat antiguo (único valor)
-      | { sets?: Array<{ peso?: string; reps?: string }>; alt?: string } // nuevo (múltiples + reemplazo)
-    >
-  >(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_LOGS);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
+    Record<string, { sets?: Array<{ peso?: string; reps?: string }>; alt?: string }>
+  >({});
   
   const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
     (localStorage.getItem("rg-selectedDay") as keyof typeof rutina) || "lunes"
   );
 
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessionStartTime] = useState<number>(() => Date.now());
+
+  // Cargar datos desde IndexedDB al montar
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const historyData = await getFromDB(STORAGE_HISTORY);
+        const currentData = await getFromDB(STORAGE_CURRENT);
+        
+        if (historyData) setHistory(historyData);
+        if (currentData) {
+          setDone(currentData.done || {});
+          setLogs(currentData.logs || {});
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("rg-selectedDay", selectedDay);
   }, [selectedDay]);
 
-  // Persistencia de completados
+  // Guardar historial en IndexedDB
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_DONE, JSON.stringify(done));
-    } catch {}
-  }, [done]);
+    if (!isLoading && history.length > 0) {
+      saveToDB(STORAGE_HISTORY, history);
+    }
+  }, [history, isLoading]);
 
-  // Persistencia de logs (peso/reps)
+  // Guardar sesión actual en IndexedDB
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_LOGS, JSON.stringify(logs));
-    } catch {}
-  }, [logs]);
+    if (!isLoading) {
+      saveToDB(STORAGE_CURRENT, { done, logs });
+    }
+  }, [done, logs, isLoading]);
 
-  // Añadimos IDs únicas por día
   const rutinaConIds = useMemo(() => {
     return Object.fromEntries(
       dias.map((d) => [d, withIds(rutina[d], d)])
     ) as typeof rutina;
   }, []);
 
-  // Resumen de volumen semanal por grupo (min–max series)
+  // Pre-cargar valores de última sesión del mismo día
+  useEffect(() => {
+    if (isLoading) return;
+    
+    const lastSession = history
+      .filter((s) => s.day === selectedDay)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+    if (lastSession && Object.keys(logs).length === 0) {
+      setLogs(lastSession.exercises as any);
+    }
+  }, [selectedDay, isLoading]);
+
+  const previousSession = useMemo(() => {
+    return history
+      .filter((s) => s.day === selectedDay)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  }, [history, selectedDay]);
+
   const volumenSemanal = useMemo(() => {
     const acc = new Map<Grupo, { min: number; max: number }>();
     dias.forEach((d) => {
@@ -495,7 +592,7 @@ const RutinaGym: React.FC = () => {
     dias.forEach((dia) => {
       const data = rutinaConIds[dia];
       csv += `\n${data.nombre}\n`;
-      data.ejercicios.forEach((ej, idx) => {
+      data.ejercicios.forEach((ej) => {
         csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${
           ej.series
         },${ej.reps},${ej.rpe},${ej.tempo || "-"},${ej.nota || "-"},${
@@ -511,7 +608,6 @@ const RutinaGym: React.FC = () => {
       },${ab.rpe},-,-,abdominales\n`;
     });
 
-    // BOM para compatibilidad con Excel
     const blob = new Blob(["\ufeff" + csv], {
       type: "text/csv;charset=utf-8;",
     });
@@ -525,9 +621,57 @@ const RutinaGym: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  // Exportar historial como JSON (backup)
+  const exportHistorial = () => {
+    const dataStr = JSON.stringify({ history, current: { done, logs } }, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rutina-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    alert("✅ Backup descargado! Guárdalo en un lugar seguro.");
+  };
+
+  // Importar historial desde JSON
+  const importHistorial = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        if (data.history) {
+          setHistory(data.history);
+          await saveToDB(STORAGE_HISTORY, data.history);
+        }
+        if (data.current) {
+          setDone(data.current.done || {});
+          setLogs(data.current.logs || {});
+          await saveToDB(STORAGE_CURRENT, data.current);
+        }
+        
+        alert("✅ Historial restaurado exitosamente!");
+      } catch (error) {
+        alert("❌ Error al importar el archivo. Asegurate que sea un backup válido.");
+        console.error(error);
+      }
+    };
+    
+    input.click();
+  };
+
   const handlePrint = () => window.print();
 
-  // Copiar resumen de día al portapapeles (para Notas/WhatsApp)
   const copiarResumen = async (dia: keyof typeof rutina, data: DiaRutina) => {
     const lineas: string[] = [];
     lineas.push(`${data.nombre}`);
@@ -557,7 +701,6 @@ const RutinaGym: React.FC = () => {
       await navigator.clipboard.writeText(texto);
       alert("Resumen copiado. Pegalo en Notas/WhatsApp ✅");
     } catch {
-      // Fallback si el navegador bloquea el Clipboard API
       const ta = document.createElement("textarea");
       ta.value = texto;
       document.body.appendChild(ta);
@@ -574,6 +717,7 @@ const RutinaGym: React.FC = () => {
   const isDone = (id?: string) => !!done[keyFor(id)];
   const toggleDone = (id?: string) =>
     setDone((d) => ({ ...d, [keyFor(id)]: !isDone(id) }));
+  
   const resetDay = () => {
     setDone((d) => {
       const copy = { ...d } as Record<string, boolean>;
@@ -591,49 +735,68 @@ const RutinaGym: React.FC = () => {
     });
   };
 
-  // Devuelve el mínimo de series sugerido a partir de ej.series
+  const finalizarSesion = () => {
+    const exercises: Record<string, SessionExercise> = {};
+    let totalVolume = 0;
+
+    day.ejercicios.forEach((ej) => {
+      const k = keyFor(ej.id);
+      const entry = logs[k];
+      const sets = (entry?.sets ?? []).filter(isFilled);
+      
+      exercises[ej.id!] = {
+        sets: sets,
+        alt: entry?.alt,
+        completed: isDone(ej.id),
+      };
+
+      sets.forEach((s) => {
+        const peso = parseFloat(s.peso || "0");
+        const reps = parseFloat(s.reps || "0");
+        totalVolume += peso * reps;
+      });
+    });
+
+    const duration = Math.round((Date.now() - sessionStartTime) / 60000);
+
+    const newSession: WorkoutSession = {
+      date: new Date().toISOString(),
+      day: selectedDay,
+      exercises,
+      totalVolume: Math.round(totalVolume),
+      duration,
+    };
+
+    setHistory((prev) => [newSession, ...prev]);
+    resetDay();
+    
+    alert(`✅ Sesión guardada!\n\nVolumen total: ${Math.round(totalVolume)} kg\nDuración: ${duration} min`);
+  };
+
   const minSeriesFrom = (series: Series): number => {
     if (typeof series === "number") return series;
     const [min] = seriesToRange(series);
     return min;
   };
 
-  // Lee sets guardados; si no hay, usa fallback (uno o min sugerido) SIN mutar estado
   const getSets = (id: string | undefined, series: Series) => {
     const k = keyFor(id);
     const entry = logs[k];
-
-    // Compatibilidad con la versión anterior (un solo peso/reps)
-    if (entry && "peso" in entry) {
-      const one = [{ peso: entry.peso, reps: entry.reps }];
-      return one;
-    }
-
-    const sets = (entry && "sets" in entry ? entry.sets : undefined) ?? [];
+    const sets = entry?.sets ?? [];
     if (sets.length > 0) return sets;
 
-    // Placeholder visual: cantidad mínima sugerida
     const n = Math.max(1, minSeriesFrom(series));
     return Array.from({ length: n }, () => ({ peso: "", reps: "" }));
   };
 
   const ensureEntry = (k: string) => {
     const e = logs[k];
-    // Migración desde forma antigua con peso/reps único
     if (!e) {
       const created = { sets: [] as Array<{ peso?: string; reps?: string }>, alt: undefined as string | undefined };
       setLogs((prev) => ({ ...prev, [k]: created }));
       return created;
     }
-
-    if ("peso" in e || "reps" in e) {
-      const migrated = { sets: [{ peso: (e as any).peso, reps: (e as any).reps }], alt: undefined as string | undefined };
-      setLogs((prev) => ({ ...prev, [k]: migrated }));
-      return migrated;
-    }
-
-    // e ya es del tipo nuevo; asegurar campos
-    const neo = { sets: (e as any).sets ?? [], alt: (e as any).alt } as {
+    const neo = { sets: e.sets ?? [], alt: e.alt } as {
       sets: Array<{ peso?: string; reps?: string }>;
       alt?: string;
     };
@@ -650,7 +813,7 @@ const RutinaGym: React.FC = () => {
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
-  const addSet = (id: string | undefined, series: Series) => {
+  const addSet = (id: string | undefined) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
@@ -667,15 +830,13 @@ const RutinaGym: React.FC = () => {
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
-  // MEJORA 1: Helpers para series cargadas
   const isFilled = (s?: { peso?: string; reps?: string }) =>
     !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== "";
 
   const filledSets = (id: string | undefined, series: Series) =>
     getSets(id, series).filter(isFilled);
 
-  // MEJORA 2: Botones útiles en tabla
-  const duplicateLastSet = (id: string | undefined, series: Series) => {
+  const duplicateLastSet = (id: string | undefined) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
@@ -690,13 +851,11 @@ const RutinaGym: React.FC = () => {
     let current = (entry.sets ?? []).slice();
     current = current.filter((s) => isFilled(s));
     if (current.length === 0) {
-      // si quitamos todas, dejá placeholder visual mínimo
       current = Array.from({ length: Math.max(1, minSeriesFrom(series)) }, () => ({ peso: "", reps: "" }));
     }
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
-  // MEJORA 3: Helpers para reemplazo de ejercicios
   const setAltName = (id: string | undefined, alt: string | undefined) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
@@ -716,6 +875,39 @@ const RutinaGym: React.FC = () => {
     0
   );
 
+  const currentVolume = useMemo(() => {
+    let total = 0;
+    day.ejercicios.forEach((ej) => {
+      const sets = filledSets(ej.id, ej.series);
+      sets.forEach((s) => {
+        const peso = parseFloat(s.peso || "0");
+        const reps = parseFloat(s.reps || "0");
+        total += peso * reps;
+      });
+    });
+    return Math.round(total);
+  }, [logs, selectedDay, day.ejercicios]);
+
+  const formatDate = (isoDate: string) => {
+    const d = new Date(isoDate);
+    return d.toLocaleDateString("es-AR", { 
+      day: "2-digit", 
+      month: "2-digit", 
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
+  // Mostrar loading mientras carga desde IndexedDB
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Cargando datos... 💪</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto">
@@ -730,7 +922,27 @@ const RutinaGym: React.FC = () => {
                 5 días | Enfoque: Hipertrofia + Estética
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition print:hidden"
+              >
+                📊 Historial ({history.length})
+              </button>
+              <button
+                onClick={exportHistorial}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition print:hidden"
+                title="Descargar backup del historial"
+              >
+                💾 Backup
+              </button>
+              <button
+                onClick={importHistorial}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition print:hidden"
+                title="Restaurar desde backup"
+              >
+                📂 Restaurar
+              </button>
               <button
                 onClick={exportToCSV}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition print:hidden"
@@ -819,21 +1031,118 @@ const RutinaGym: React.FC = () => {
           ))}
         </div>
 
+        {/* Modal de Historial */}
+        {showHistory && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-white">📊 Historial de Entrenamientos</h2>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-white hover:text-slate-300 text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {history.length === 0 ? (
+                <p className="text-slate-400 text-center py-8">
+                  Aún no hay sesiones guardadas. Completa tu primer entrenamiento!
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {history.map((session, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-slate-700 rounded-lg p-4 border border-slate-600"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-white capitalize">
+                            {session.day} - {formatDate(session.date)}
+                          </h3>
+                          <div className="flex gap-4 mt-1 text-sm text-slate-300">
+                            <span>💪 Volumen: {session.totalVolume} kg</span>
+                            {session.duration && <span>⏱️ {session.duration} min</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 text-sm">
+                        {Object.entries(session.exercises).map(([exId, exData]) => {
+                          const originalEx = rutinaConIds[session.day].ejercicios.find(
+                            (e) => e.id === exId
+                          );
+                          if (!originalEx) return null;
+
+                          const displayEx = exData.alt || originalEx.nombre;
+                          const setsStr = exData.sets
+                            .map((s) => `${s.peso}×${s.reps}`)
+                            .join(" | ");
+
+                          return (
+                            <div
+                              key={exId}
+                              className={`p-2 rounded ${
+                                exData.completed ? "bg-slate-600" : "bg-slate-700/50"
+                              }`}
+                            >
+                              <span className={exData.completed ? "text-white" : "text-slate-400"}>
+                                {exData.completed ? "✓" : "○"} {displayEx}
+                              </span>
+                              <span className="text-slate-300 ml-2 font-mono text-xs">
+                                {setsStr || "—"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Comparación con sesión anterior */}
+        {previousSession && !showHistory && (
+          <div className="bg-slate-800 rounded-xl shadow-xl p-4 mb-6 border border-slate-700">
+            <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+              🔄 Última vez ({formatDate(previousSession.date)})
+            </h3>
+            <div className="grid md:grid-cols-2 gap-2 text-sm text-slate-300">
+              <div>Volumen total: <span className="font-bold">{previousSession.totalVolume} kg</span></div>
+              <div>Duración: <span className="font-bold">{previousSession.duration || "—"} min</span></div>
+            </div>
+          </div>
+        )}
+
         {/* Tabla de ejercicios */}
         <div className="bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white">
           <div className="bg-slate-700 p-4 border-b border-slate-600 print:bg-white print:text-slate-900 print:border-b">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-xl font-bold text-white print:text-slate-900">
                 {day.nombre}
               </h2>
               <div className="flex items-center gap-2 print:hidden">
+                <span className="text-xs bg-emerald-700 text-white px-3 py-1 rounded-lg font-semibold">
+                  Volumen actual: {currentVolume} kg
+                </span>
                 <span className="text-xs bg-slate-800 text-slate-200 px-2 py-1 rounded-lg border border-slate-600">
                   {completedCount}/{day.ejercicios.length} completados
                 </span>
                 <button
+                  onClick={finalizarSesion}
+                  className="text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold"
+                  title="Guardar sesión en historial"
+                >
+                  ✓ Finalizar Sesión
+                </button>
+                <button
                   onClick={resetDay}
                   className="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded-md border border-slate-500"
-                  title="Borrar checks del día"
+                  title="Borrar datos del día actual"
                 >
                   Reset día
                 </button>
@@ -922,7 +1231,6 @@ const RutinaGym: React.FC = () => {
                       </td>
                       <td className="px-2 py-4 font-mono font-bold text-slate-700">{`E${rowIndex}`}</td>
                       
-                      {/* MEJORA 3: Celda de ejercicio con botón Reemplazar */}
                       <td className={`px-4 py-4 font-semibold ${colors.text}`}>
                         <div className="flex items-center gap-2">
                           <span>{displayName(ej)}</span>
@@ -931,7 +1239,7 @@ const RutinaGym: React.FC = () => {
                             onClick={() => {
                               const actual = displayName(ej);
                               const nuevo = window.prompt("Reemplazar nombre del ejercicio por:", actual);
-                              if (nuevo === null) return; // cancelado
+                              if (nuevo === null) return;
                               setAltName(ej.id, nuevo);
                             }}
                             className="text-xs px-2 py-1 rounded-md border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70"
@@ -939,7 +1247,6 @@ const RutinaGym: React.FC = () => {
                           >
                             Reemplazar
                           </button>
-                          {/* Badge si está reemplazado */}
                           {displayName(ej) !== ej.nombre && (
                             <span className="text-[10px] uppercase tracking-wide bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
                               reemplazado
@@ -955,67 +1262,75 @@ const RutinaGym: React.FC = () => {
                         {ej.reps}
                       </td>
 
-                      {/* MEJORA 2: Editor de series múltiples con botones útiles */}
                       <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {getSets(ej.id, ej.series).map((s, sidx) => (
-                            <div key={sidx} className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                placeholder="kg"
-                                value={s.peso ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
-                                className="w-16 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                              <span className="text-slate-600 text-sm">×</span>
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                placeholder="reps"
-                                value={s.reps ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
-                                className="w-14 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
+                        <div className="space-y-2">
+                          {previousSession?.exercises[ej.id!] && (
+                            <div className="text-xs text-slate-500 mb-1">
+                              Anterior: {previousSession.exercises[ej.id!].sets
+                                .map((s) => `${s.peso}×${s.reps}`)
+                                .join(" | ")}
+                            </div>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-2 items-center">
+                            {getSets(ej.id, ej.series).map((s, sidx) => (
+                              <div key={sidx} className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  placeholder="kg"
+                                  value={s.peso ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
+                                  className="w-16 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <span className="text-slate-600 text-sm">×</span>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  placeholder="reps"
+                                  value={s.reps ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
+                                  className="w-14 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeSet(ej.id, sidx)}
+                                  className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                                  title="Quitar serie"
+                                >
+                                  –
+                                </button>
+                              </div>
+                            ))}
+
+                            <div className="flex gap-1">
                               <button
                                 type="button"
-                                onClick={() => removeSet(ej.id, sidx)}
+                                onClick={() => addSet(ej.id)}
                                 className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                                title="Quitar serie"
+                                title="Agregar serie"
                               >
-                                –
+                                + Añadir
+                              </button>
+                              
+                              <button
+                                type="button"
+                                onClick={() => duplicateLastSet(ej.id)}
+                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                                title="Duplicar última serie"
+                              >
+                                Duplicar
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => clearEmptySets(ej.id, ej.series)}
+                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                                title="Eliminar series vacías"
+                              >
+                                Limpiar
                               </button>
                             </div>
-                          ))}
-
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => addSet(ej.id, ej.series)}
-                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                              title="Agregar serie"
-                            >
-                              + Añadir serie
-                            </button>
-                            
-                            {/* MEJORA 2: Botones útiles */}
-                            <button
-                              type="button"
-                              onClick={() => duplicateLastSet(ej.id, ej.series)}
-                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                              title="Duplicar última serie"
-                            >
-                              Duplicar
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => clearEmptySets(ej.id, ej.series)}
-                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                              title="Eliminar series vacías"
-                            >
-                              Limpiar vacías
-                            </button>
                           </div>
                         </div>
                       </td>
@@ -1122,7 +1437,6 @@ const RutinaGym: React.FC = () => {
         </div>
       </div>
 
-      {/* Estilos de impresión mínimos */}
       <style>{`
         @media print {
           * { box-shadow: none !important; }
