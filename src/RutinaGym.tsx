@@ -430,9 +430,13 @@ const RutinaGym: React.FC = () => {
     }
   });
   
-  // Ahora las entradas guardan "sets" (array de series)
+  // Ahora las entradas guardan "sets" (array de series) y "alt" (nombre alternativo)
   const [logs, setLogs] = useState<
-    Record<string, { sets?: Array<{ peso?: string; reps?: string }> } | { peso?: string; reps?: string }>
+    Record<
+      string,
+      | { peso?: string; reps?: string } // compat antiguo (único valor)
+      | { sets?: Array<{ peso?: string; reps?: string }>; alt?: string } // nuevo (múltiples + reemplazo)
+    >
   >(() => {
     try {
       const raw = localStorage.getItem(STORAGE_LOGS);
@@ -531,20 +535,17 @@ const RutinaGym: React.FC = () => {
 
     data.ejercicios.forEach((ej, i) => {
       const idx = `E${i + 1}`;
-      const sets = getSets(ej.id, ej.series);
+      const sets = filledSets(ej.id, ej.series);
 
-      // Compacto: "80×10 | 80×9 | 75×10"
-      const serial = sets
-        .map((s) => {
-          const p = (s.peso ?? "").toString().trim();
-          const r = (s.reps ?? "").toString().trim();
-          const pp = p === "" ? "___" : p;
-          const rr = r === "" ? "___" : r;
-          return `${pp}×${rr}`;
-        })
-        .join(" | ");
+      const serial = sets.length > 0
+        ? sets
+            .map((s) => `${(s.peso ?? "").toString().trim()}×${(s.reps ?? "").toString().trim()}`)
+            .join(" | ")
+        : Array.from({ length: Math.max(1, minSeriesFrom(ej.series)) })
+            .map(() => "___×___")
+            .join(" | ");
 
-      lineas.push(`${idx} ${ej.nombre}: ${serial}  |  RPE objetivo: ${ej.rpe}`);
+      lineas.push(`${idx} ${displayName(ej)}: ${serial}  |  RPE objetivo: ${ej.rpe}`);
     });
 
     lineas.push("");
@@ -618,25 +619,35 @@ const RutinaGym: React.FC = () => {
 
   const ensureEntry = (k: string) => {
     const e = logs[k];
-    if (!e || ("peso" in e && !("sets" in (e as any)))) {
-      // Migrar (si existía peso/reps único)
-      const migrated = "peso" in (e || {}) ? [{ peso: (e as any).peso, reps: (e as any).reps }] : [];
-      setLogs((prev) => ({ ...prev, [k]: { sets: migrated } }));
-      return { sets: migrated };
+    // Migración desde forma antigua con peso/reps único
+    if (!e) {
+      const created = { sets: [] as Array<{ peso?: string; reps?: string }>, alt: undefined as string | undefined };
+      setLogs((prev) => ({ ...prev, [k]: created }));
+      return created;
     }
-    return e as { sets?: Array<{ peso?: string; reps?: string }> };
+
+    if ("peso" in e || "reps" in e) {
+      const migrated = { sets: [{ peso: (e as any).peso, reps: (e as any).reps }], alt: undefined as string | undefined };
+      setLogs((prev) => ({ ...prev, [k]: migrated }));
+      return migrated;
+    }
+
+    // e ya es del tipo nuevo; asegurar campos
+    const neo = { sets: (e as any).sets ?? [], alt: (e as any).alt } as {
+      sets: Array<{ peso?: string; reps?: string }>;
+      alt?: string;
+    };
+    if (neo !== e) setLogs((prev) => ({ ...prev, [k]: neo }));
+    return neo;
   };
 
   const setSetValue = (id: string | undefined, idx: number, field: "peso" | "reps", value: string) => {
     const k = keyFor(id);
-    // Asegurar entrada
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    // Expandir si hace falta
     while (current.length <= idx) current.push({ peso: "", reps: "" });
     current[idx] = { ...current[idx], [field]: value };
-
-    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
   const addSet = (id: string | undefined, series: Series) => {
@@ -644,7 +655,7 @@ const RutinaGym: React.FC = () => {
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
     current.push({ peso: "", reps: "" });
-    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
   const removeSet = (id: string | undefined, idx: number) => {
@@ -653,7 +664,51 @@ const RutinaGym: React.FC = () => {
     const current = (entry.sets ?? []).slice();
     if (current.length === 0) return;
     current.splice(idx, 1);
-    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+  };
+
+  // MEJORA 1: Helpers para series cargadas
+  const isFilled = (s?: { peso?: string; reps?: string }) =>
+    !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== "";
+
+  const filledSets = (id: string | undefined, series: Series) =>
+    getSets(id, series).filter(isFilled);
+
+  // MEJORA 2: Botones útiles en tabla
+  const duplicateLastSet = (id: string | undefined, series: Series) => {
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    const current = (entry.sets ?? []).slice();
+    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "" };
+    current.push({ peso: last.peso ?? "", reps: last.reps ?? "" });
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+  };
+
+  const clearEmptySets = (id: string | undefined, series: Series) => {
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    let current = (entry.sets ?? []).slice();
+    current = current.filter((s) => isFilled(s));
+    if (current.length === 0) {
+      // si quitamos todas, dejá placeholder visual mínimo
+      current = Array.from({ length: Math.max(1, minSeriesFrom(series)) }, () => ({ peso: "", reps: "" }));
+    }
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+  };
+
+  // MEJORA 3: Helpers para reemplazo de ejercicios
+  const setAltName = (id: string | undefined, alt: string | undefined) => {
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    const clean = (alt ?? "").trim();
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, alt: clean || undefined } }));
+  };
+
+  const displayName = (ej: Ejercicio) => {
+    const k = keyFor(ej.id);
+    const entry = logs[k] as any;
+    const alt = entry && "alt" in entry ? entry.alt : undefined;
+    return (alt && alt.trim()) ? alt.trim() : ej.nombre;
   };
 
   const completedCount = day.ejercicios.reduce(
@@ -866,9 +921,33 @@ const RutinaGym: React.FC = () => {
                         />
                       </td>
                       <td className="px-2 py-4 font-mono font-bold text-slate-700">{`E${rowIndex}`}</td>
+                      
+                      {/* MEJORA 3: Celda de ejercicio con botón Reemplazar */}
                       <td className={`px-4 py-4 font-semibold ${colors.text}`}>
-                        {ej.nombre}
+                        <div className="flex items-center gap-2">
+                          <span>{displayName(ej)}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const actual = displayName(ej);
+                              const nuevo = window.prompt("Reemplazar nombre del ejercicio por:", actual);
+                              if (nuevo === null) return; // cancelado
+                              setAltName(ej.id, nuevo);
+                            }}
+                            className="text-xs px-2 py-1 rounded-md border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70"
+                            title="Reemplazar ejercicio para esta sesión"
+                          >
+                            Reemplazar
+                          </button>
+                          {/* Badge si está reemplazado */}
+                          {displayName(ej) !== ej.nombre && (
+                            <span className="text-[10px] uppercase tracking-wide bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
+                              reemplazado
+                            </span>
+                          )}
+                        </div>
                       </td>
+
                       <td className="px-4 py-4 text-center font-bold text-slate-700">
                         {ej.series}
                       </td>
@@ -876,7 +955,7 @@ const RutinaGym: React.FC = () => {
                         {ej.reps}
                       </td>
 
-                      {/* NUEVO: editor compacto de series múltiples */}
+                      {/* MEJORA 2: Editor de series múltiples con botones útiles */}
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2 items-center">
                           {getSets(ej.id, ej.series).map((s, sidx) => (
@@ -909,14 +988,35 @@ const RutinaGym: React.FC = () => {
                             </div>
                           ))}
 
-                          <button
-                            type="button"
-                            onClick={() => addSet(ej.id, ej.series)}
-                            className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                            title="Agregar serie"
-                          >
-                            + Añadir serie
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => addSet(ej.id, ej.series)}
+                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                              title="Agregar serie"
+                            >
+                              + Añadir serie
+                            </button>
+                            
+                            {/* MEJORA 2: Botones útiles */}
+                            <button
+                              type="button"
+                              onClick={() => duplicateLastSet(ej.id, ej.series)}
+                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                              title="Duplicar última serie"
+                            >
+                              Duplicar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => clearEmptySets(ej.id, ej.series)}
+                              className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                              title="Eliminar series vacías"
+                            >
+                              Limpiar vacías
+                            </button>
+                          </div>
                         </div>
                       </td>
 
