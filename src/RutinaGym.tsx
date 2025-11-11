@@ -567,7 +567,11 @@ const RutinaGym: React.FC = () => {
       return copy;
     });
   };
-
+  const getLog = (id?: string) => logs[keyFor(id)] ?? { peso: "", reps: "" };
+  const updateLog = (id: string | undefined, field: "peso" | "reps", value: string) => {
+    const k = keyFor(id);
+    setLogs((prev) => ({ ...prev, [k]: { ...prev[k], [field]: value } }));
+  };
   const completedCount = day.ejercicios.reduce(
     (acc, e) => acc + (isDone(e.id) ? 1 : 0),
     0
@@ -727,17 +731,29 @@ const RutinaGym: React.FC = () => {
                     Series
                   </th>
                   <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Reps Objetivo
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    RPE
-                  </th>
+  scope="col"
+  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+>
+  Reps Objetivo
+</th>
+<th
+  scope="col"
+  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+>
+  Peso (kg)
+</th>
+<th
+  scope="col"
+  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+>
+  Reps reales
+</th>
+<th
+  scope="col"
+  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+>
+  RPE
+</th>
                   <th
                     scope="col"
                     className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
