@@ -526,8 +526,11 @@ const RutinaGym: React.FC = () => {
 
     data.ejercicios.forEach((ej, i) => {
       const idx = `E${i + 1}`;
+      const cur = getLog(ej.id);
+      const peso = (cur?.peso ?? "___").toString().trim() || "___";
+      const reps = (cur?.reps ?? "___").toString().trim() || "___";
       lineas.push(
-        `${idx} ${ej.nombre}: ___ kg  |  Reps: ___  |  RPE objetivo: ${ej.rpe}`
+        `${idx} ${ej.nombre}: ${peso} kg  |  Reps: ${reps}  |  RPE objetivo: ${ej.rpe}`
       );
     });
 
@@ -561,6 +564,13 @@ const RutinaGym: React.FC = () => {
   const resetDay = () => {
     setDone((d) => {
       const copy = { ...d } as Record<string, boolean>;
+      Object.keys(copy).forEach((k) => {
+        if (k.startsWith(`${selectedDay}:`)) delete copy[k];
+      });
+      return copy;
+    });
+    setLogs((prev) => {
+      const copy = { ...prev };
       Object.keys(copy).forEach((k) => {
         if (k.startsWith(`${selectedDay}:`)) delete copy[k];
       });
