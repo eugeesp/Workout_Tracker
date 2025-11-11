@@ -507,6 +507,8 @@ const RutinaGym: React.FC = () => {
 
   const [showHistory, setShowHistory] = useState(false);
   const [sessionStartTime] = useState<number>(() => Date.now());
+  const [showLegend, setShowLegend] = useState(false);
+  const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
 
   // Cargar datos desde IndexedDB al montar
   useEffect(() => {
@@ -909,121 +911,108 @@ const RutinaGym: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 print:bg-white print:p-0">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl p-6 mb-6 border border-slate-700 print:shadow-none print:border-0 print:bg-white print:p-0">
-          <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-white print:text-slate-900 mb-2">
-                💪 Rutina de Hipertrofia
-              </h1>
-              <p className="text-slate-300 print:text-slate-700">
-                5 días | Enfoque: Hipertrofia + Estética
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition print:hidden"
-              >
-                📊 Historial ({history.length})
-              </button>
-              <button
-                onClick={exportHistorial}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition print:hidden"
-                title="Descargar backup del historial"
-              >
-                💾 Backup
-              </button>
-              <button
-                onClick={importHistorial}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition print:hidden"
-                title="Restaurar desde backup"
-              >
-                📂 Restaurar
-              </button>
-              <button
-                onClick={exportToCSV}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition print:hidden"
-              >
-                <Download size={18} />
-                Exportar CSV
-              </button>
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition print:hidden"
-              >
-                <Printer size={18} />
-                Imprimir
-              </button>
-              <button
-                onClick={() => copiarResumen(selectedDay, day)}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition print:hidden"
-              >
-                Copiar a Notas
-              </button>
-            </div>
-          </div>
-
-          {/* Leyenda de colores */}
-          <div className="bg-slate-700 rounded-lg p-4 print:hidden">
-            <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <Info size={18} /> Código de Colores por Grupo Muscular
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {Object.entries(colorLegend).map(([key, value]) => (
-                <div
-                  key={key}
-                  className={`${value.bg} ${value.border} border-2 rounded px-3 py-1.5 text-center`}
+        {/* Header compacto */}
+        <div className="bg-slate-800 rounded-lg shadow-xl p-3 md:p-4 mb-3 border border-slate-700 print:shadow-none print:border-0 print:bg-white">
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white print:text-slate-900">
+                  💪 Rutina Hipertrofia
+                </h1>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 text-xs rounded transition print:hidden"
                 >
-                  <span className={`${value.text} font-medium capitalize`}>
-                    {key}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Resumen volumen semanal */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl p-6 mb-6 border border-slate-700 print:border-0 print:shadow-none print:bg-white">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="text-white" size={18} />
-            <h3 className="text-white font-semibold text-lg print:text-slate-900">
-              Volumen semanal por grupo (series mín–máx)
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[...volumenSemanal.entries()].map(([grupo, { min, max }]) => (
-              <div
-                key={grupo}
-                className={`rounded-lg p-3 border ${colorLegend[grupo].border} ${colorLegend[grupo].bg}`}
-              >
-                <div
-                  className={`text-sm font-semibold ${colorLegend[grupo].text} capitalize`}
+                  📊 ({history.length})
+                </button>
+                <button
+                  onClick={exportHistorial}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
+                  title="Backup"
                 >
-                  {grupo}
-                </div>
-                <div className="text-slate-700 font-mono">
-                  {min === max ? min : `${min}–${max}`} series
+                  💾
+                </button>
+                <button
+                  onClick={importHistorial}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
+                  title="Restaurar"
+                >
+                  📂
+                </button>
+              </div>
+            </div>
+
+            {/* Botones colapsables */}
+            <div className="flex gap-2 text-xs print:hidden">
+              <button
+                onClick={() => setShowLegend(!showLegend)}
+                className="text-slate-300 hover:text-white underline"
+              >
+                {showLegend ? "Ocultar" : "Ver"} colores
+              </button>
+              <button
+                onClick={() => setShowVolumenSemanal(!showVolumenSemanal)}
+                className="text-slate-300 hover:text-white underline"
+              >
+                {showVolumenSemanal ? "Ocultar" : "Ver"} volumen semanal
+              </button>
+            </div>
+
+            {/* Leyenda colapsable */}
+            {showLegend && (
+              <div className="bg-slate-700 rounded p-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
+                  {Object.entries(colorLegend).map(([key, value]) => (
+                    <div
+                      key={key}
+                      className={`${value.bg} ${value.border} border rounded px-2 py-0.5 text-center text-xs`}
+                    >
+                      <span className={`${value.text} font-medium capitalize`}>
+                        {key}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* Volumen semanal colapsable */}
+            {showVolumenSemanal && (
+              <div className="bg-slate-700 rounded p-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[...volumenSemanal.entries()].map(([grupo, { min, max }]) => (
+                    <div
+                      key={grupo}
+                      className={`rounded p-2 border text-xs ${colorLegend[grupo].border} ${colorLegend[grupo].bg}`}
+                    >
+                      <div className={`font-semibold ${colorLegend[grupo].text} capitalize`}>
+                        {grupo}
+                      </div>
+                      <div className="text-slate-700 font-mono text-xs">
+                        {min === max ? min : `${min}–${max}`} series
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Selector de días */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 print:hidden">
+        <div className="flex gap-1 mb-3 overflow-x-auto pb-2 print:hidden">
           {dias.map((dia) => (
             <button
               key={dia}
               onClick={() => setSelectedDay(dia)}
-              aria-pressed={selectedDay === dia}
-              className={`px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+              className={`px-3 py-2 rounded text-sm font-semibold transition whitespace-nowrap ${
                 selectedDay === dia
-                  ? "bg-blue-600 text-white shadow-lg"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-700 text-slate-300"
               }`}
             >
               {dia.charAt(0).toUpperCase() + dia.slice(1)}
@@ -1105,244 +1094,169 @@ const RutinaGym: React.FC = () => {
           </div>
         )}
 
-        {/* Comparación con sesión anterior */}
+        {/* Comparación con sesión anterior - más compacto */}
         {previousSession && !showHistory && (
-          <div className="bg-slate-800 rounded-xl shadow-xl p-4 mb-6 border border-slate-700">
-            <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
-              🔄 Última vez ({formatDate(previousSession.date)})
-            </h3>
-            <div className="grid md:grid-cols-2 gap-2 text-sm text-slate-300">
-              <div>Volumen total: <span className="font-bold">{previousSession.totalVolume} kg</span></div>
-              <div>Duración: <span className="font-bold">{previousSession.duration || "—"} min</span></div>
+          <div className="bg-slate-800 rounded-lg p-2 mb-3 border border-slate-700 text-xs">
+            <div className="flex justify-between text-slate-300">
+              <span>🔄 {formatDate(previousSession.date).split(',')[0]}</span>
+              <span className="font-bold">{previousSession.totalVolume} kg</span>
+              <span>{previousSession.duration}min</span>
             </div>
           </div>
         )}
 
-        {/* Tabla de ejercicios */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white">
-          <div className="bg-slate-700 p-4 border-b border-slate-600 print:bg-white print:text-slate-900 print:border-b">
+        {/* Tabla de ejercicios - COMPACTA */}
+        <div className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white mb-3">
+          <div className="bg-slate-700 p-2 border-b border-slate-600 print:bg-white print:border-b">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-xl font-bold text-white print:text-slate-900">
+              <h2 className="text-sm md:text-base font-bold text-white print:text-slate-900">
                 {day.nombre}
               </h2>
-              <div className="flex items-center gap-2 print:hidden">
-                <span className="text-xs bg-emerald-700 text-white px-3 py-1 rounded-lg font-semibold">
-                  Volumen actual: {currentVolume} kg
+              <div className="flex items-center gap-1 print:hidden text-xs">
+                <span className="bg-emerald-700 text-white px-2 py-0.5 rounded font-semibold">
+                  {currentVolume} kg
                 </span>
-                <span className="text-xs bg-slate-800 text-slate-200 px-2 py-1 rounded-lg border border-slate-600">
-                  {completedCount}/{day.ejercicios.length} completados
+                <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded">
+                  {completedCount}/{day.ejercicios.length}
                 </span>
                 <button
                   onClick={finalizarSesion}
-                  className="text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold"
-                  title="Guardar sesión en historial"
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded font-semibold"
                 >
-                  ✓ Finalizar Sesión
+                  ✓ Fin
                 </button>
                 <button
                   onClick={resetDay}
-                  className="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded-md border border-slate-500"
-                  title="Borrar datos del día actual"
+                  className="bg-slate-600 hover:bg-slate-500 text-white px-2 py-0.5 rounded"
                 >
-                  Reset día
+                  Reset
                 </button>
               </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full" role="table">
+            <table className="w-full text-xs" role="table">
               <thead className="bg-slate-700 print:bg-slate-100">
                 <tr>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    ✓
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-2 py-3 text-left text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    #
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
+                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">✓</th>
+                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800 sticky left-0 bg-slate-700 z-10">
                     Ejercicio
                   </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Series
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Reps Objetivo
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Series (kg × reps)
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    RPE
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Tempo
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-sm font-semibold text-slate-300 print:text-slate-800"
-                  >
-                    Notas
-                  </th>
+                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">S</th>
+                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">Reps</th>
+                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">kg × reps</th>
+                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">RPE</th>
                 </tr>
               </thead>
               <tbody>
                 {day.ejercicios.map((ej, idx) => {
                   const colors = colorLegend[ej.grupo];
-                  const rowIndex = idx + 1;
                   const checked = isDone(ej.id);
                   return (
                     <tr
                       key={ej.id}
-                      className={`${colors.bg} border-b-2 ${colors.border} hover:opacity-80 transition print:hover:opacity-100`}
+                      className={`${colors.bg} border-b ${colors.border}`}
                     >
-                      <td className="px-4 py-4 align-middle">
+                      <td className="px-2 py-2">
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleDone(ej.id)}
-                          className="w-5 h-5 accent-blue-600"
-                          aria-label={`Marcar ${ej.nombre} como completado`}
+                          className="w-4 h-4"
                         />
                       </td>
-                      <td className="px-2 py-4 font-mono font-bold text-slate-700">{`E${rowIndex}`}</td>
                       
-                      <td className={`px-4 py-4 font-semibold ${colors.text}`}>
-                        <div className="flex items-center gap-2">
-                          <span>{displayName(ej)}</span>
+                      <td className={`px-2 py-2 font-semibold ${colors.text} sticky left-0 ${colors.bg} z-10`}>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-[10px] text-slate-600">E{idx + 1}</span>
+                            <span className="text-[11px] leading-tight">{displayName(ej)}</span>
+                          </div>
+                          {previousSession?.exercises[ej.id!] && (
+                            <div className="text-[10px] text-slate-500">
+                              ← {previousSession.exercises[ej.id!].sets
+                                .map((s) => `${s.peso}×${s.reps}`)
+                                .join(" ")}
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
                               const actual = displayName(ej);
-                              const nuevo = window.prompt("Reemplazar nombre del ejercicio por:", actual);
-                              if (nuevo === null) return;
-                              setAltName(ej.id, nuevo);
+                              const nuevo = window.prompt("Reemplazar:", actual);
+                              if (nuevo !== null) setAltName(ej.id, nuevo);
                             }}
-                            className="text-xs px-2 py-1 rounded-md border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70"
-                            title="Reemplazar ejercicio para esta sesión"
+                            className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70 w-fit"
                           >
                             Reemplazar
                           </button>
-                          {displayName(ej) !== ej.nombre && (
-                            <span className="text-[10px] uppercase tracking-wide bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
-                              reemplazado
-                            </span>
-                          )}
                         </div>
                       </td>
 
-                      <td className="px-4 py-4 text-center font-bold text-slate-700">
+                      <td className="px-2 py-2 text-center font-bold text-slate-700 text-[11px]">
                         {ej.series}
                       </td>
-                      <td className="px-4 py-4 text-center font-mono text-slate-700">
+                      <td className="px-2 py-2 text-center font-mono text-slate-700 text-[10px]">
                         {ej.reps}
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="space-y-2">
-                          {previousSession?.exercises[ej.id!] && (
-                            <div className="text-xs text-slate-500 mb-1">
-                              Anterior: {previousSession.exercises[ej.id!].sets
-                                .map((s) => `${s.peso}×${s.reps}`)
-                                .join(" | ")}
-                            </div>
-                          )}
-                          
-                          <div className="flex flex-wrap gap-2 items-center">
-                            {getSets(ej.id, ej.series).map((s, sidx) => (
-                              <div key={sidx} className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  placeholder="kg"
-                                  value={s.peso ?? ""}
-                                  onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
-                                  className="w-16 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-slate-600 text-sm">×</span>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  placeholder="reps"
-                                  value={s.reps ?? ""}
-                                  onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
-                                  className="w-14 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeSet(ej.id, sidx)}
-                                  className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                                  title="Quitar serie"
-                                >
-                                  –
-                                </button>
-                              </div>
-                            ))}
-
-                            <div className="flex gap-1">
+                      <td className="px-2 py-2">
+                        <div className="flex flex-col gap-1">
+                          {getSets(ej.id, ej.series).map((s, sidx) => (
+                            <div key={sidx} className="flex items-center gap-0.5">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="kg"
+                                value={s.peso ?? ""}
+                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
+                                className="w-12 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                              />
+                              <span className="text-slate-600 text-xs">×</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder="r"
+                                value={s.reps ?? ""}
+                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
+                                className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                              />
                               <button
                                 type="button"
-                                onClick={() => addSet(ej.id)}
-                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                                title="Agregar serie"
+                                onClick={() => removeSet(ej.id, sidx)}
+                                className="px-1 text-xs rounded border border-slate-400 hover:bg-slate-200"
                               >
-                                + Añadir
-                              </button>
-                              
-                              <button
-                                type="button"
-                                onClick={() => duplicateLastSet(ej.id)}
-                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                                title="Duplicar última serie"
-                              >
-                                Duplicar
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => clearEmptySets(ej.id, ej.series)}
-                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
-                                title="Eliminar series vacías"
-                              >
-                                Limpiar
+                                −
                               </button>
                             </div>
+                          ))}
+
+                          <div className="flex gap-0.5 mt-1">
+                            <button
+                              onClick={() => addSet(ej.id)}
+                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
+                            >
+                              +
+                            </button>
+                            <button
+                              onClick={() => duplicateLastSet(ej.id)}
+                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
+                            >
+                              Dup
+                            </button>
+                            <button
+                              onClick={() => clearEmptySets(ej.id, ej.series)}
+                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
+                            >
+                              Limp
+                            </button>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-4 py-4 text-center font-bold text-slate-700">
+                      <td className="px-2 py-2 text-center font-bold text-slate-700 text-[11px]">
                         {ej.rpe}
-                      </td>
-                      <td className="px-4 py-4 text-center font-mono text-sm text-slate-600">
-                        {ej.tempo || "—"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-slate-600 italic">
-                        {ej.nota || "—"}
                       </td>
                     </tr>
                   );
@@ -1352,88 +1266,69 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
 
-        {/* Abdominales */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl p-6 mt-6 border border-slate-700 print:border-0 print:shadow-none print:bg-white">
-          <h3 className="text-xl font-bold text-white mb-4 print:text-slate-900">
-            🔥 Abdominales (día intercalado / opcional)
+        {/* Abdominales - compacto */}
+        <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:bg-white">
+          <h3 className="text-sm font-bold text-white mb-2 print:text-slate-900">
+            🔥 Abdominales (opcional)
           </h3>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-3 gap-2 text-xs">
             {abdominales.map((ab, idx) => (
-              <div
-                key={idx}
-                className="bg-slate-700 rounded-lg p-4 border-l-4 border-indigo-500 print:bg-white print:border print:border-indigo-200"
-              >
-                <h4 className="font-semibold text-white mb-2 print:text-slate-900">
+              <div key={idx} className="bg-slate-700 rounded p-2 border-l-2 border-indigo-500 print:bg-white">
+                <h4 className="font-semibold text-white mb-1 print:text-slate-900 text-[11px]">
                   {ab.nombre}
                 </h4>
-                <div className="text-slate-300 text-sm space-y-1 print:text-slate-800">
-                  <p>
-                    <span className="font-semibold">Series:</span> {ab.series}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Reps:</span> {ab.reps}
-                  </p>
-                  <p>
-                    <span className="font-semibold">RPE:</span> {ab.rpe}
-                  </p>
+                <div className="text-slate-300 print:text-slate-800 text-[10px]">
+                  {ab.series} × {ab.reps} | RPE {ab.rpe}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Notas técnicas */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl p-6 mt-6 border border-slate-700 print:border-0 print:shadow-none print:bg-white">
-          <h3 className="text-xl font-bold text-white mb-4 print:text-slate-900">
-            📋 Notas Técnicas
-          </h3>
-          <div className="grid md:grid-cols-2 gap-4 text-slate-300 print:text-slate-800">
+        {/* Notas técnicas - colapsable */}
+        <details className="bg-slate-800 rounded-lg p-3 border border-slate-700 print:bg-white">
+          <summary className="text-sm font-bold text-white cursor-pointer print:text-slate-900">
+            📋 Notas Técnicas (click para expandir)
+          </summary>
+          <div className="grid md:grid-cols-2 gap-3 text-slate-300 print:text-slate-800 mt-3 text-xs">
             <div>
-              <h4 className="font-semibold text-blue-400 mb-2 print:text-blue-700">
+              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
                 Progresión de Reps
               </h4>
-              <p className="text-sm">
-                Los rangos 8-10 / 9-11 / 10-12 indican progresión semanal.
-                Semana 1: 8-10 reps, Semana 2: 9-11, Semana 3: 10-12. Al
-                completar semana 3, aumentar peso y volver a 8-10.
+              <p>
+                8-10 / 9-11 / 10-12 = progresión semanal. Al completar semana 3, subir peso y volver a 8-10.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-400 mb-2 print:text-blue-700">
+              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
                 Back-off Sets
               </h4>
-              <p className="text-sm">
-                Reducir ~10% el peso en las series finales para mantener calidad
-                técnica y volumen efectivo.
+              <p>
+                Reducir ~10% el peso en las series finales para mantener calidad técnica.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-400 mb-2 print:text-blue-700">
+              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
                 Tempo (ej: 1-0-3-1)
               </h4>
-              <p className="text-sm">
-                1s excéntrico – 0s pausa abajo – 3s concéntrico – 1s pausa
-                arriba. Enfatiza control y conexión mente-músculo.
+              <p>
+                1s excéntrico – 0s pausa abajo – 3s concéntrico – 1s pausa arriba.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-400 mb-2 print:text-blue-700">
-                RPE (Rate of Perceived Exertion)
+              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
+                RPE
               </h4>
-              <p className="text-sm">
-                Escala de esfuerzo 1–10. RPE 7 ≈ 3 reps en recámara; RPE 8 ≈ 2
-                reps en recámara. Evitar el fallo.
+              <p>
+                Escala 1–10. RPE 7 ≈ 3 reps en recámara; RPE 8 ≈ 2 reps. Evitar fallo.
               </p>
             </div>
           </div>
-        </div>
+        </details>
 
-        {/* Footer */}
-        <div className="text-center text-slate-400 text-sm mt-8 print:text-slate-700 print:mt-4">
-          <p>
-            Perfil: 83kg | 1.75m | 23 años | Objetivo: Hipertrofia + Estética |
-            Fase: Volumen Ligero
-          </p>
+        {/* Footer compacto */}
+        <div className="text-center text-slate-400 text-[10px] mt-3 print:text-slate-700">
+          <p>83kg | 1.75m | 23 años | Hipertrofia + Estética</p>
         </div>
       </div>
 
