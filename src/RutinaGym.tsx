@@ -417,7 +417,8 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
 // Componente
 // =======================
 
-const STORAGE_DONE = "rg-done-v1" as const; // peso/reps reales por ejercicio
+const STORAGE_DONE = "rg-done-v1" as const;
+const STORAGE_LOGS = "rg-logs-v1" as const; // peso/reps reales por ejercicio
 
 const RutinaGym: React.FC = () => {
   const [done, setDone] = useState<Record<string, boolean>>(() => {
@@ -428,8 +429,10 @@ const RutinaGym: React.FC = () => {
       return {};
     }
   });
+  
+  // Ahora las entradas guardan "sets" (array de series)
   const [logs, setLogs] = useState<
-    Record<string, { peso?: string; reps?: string }>
+    Record<string, { sets?: Array<{ peso?: string; reps?: string }> } | { peso?: string; reps?: string }>
   >(() => {
     try {
       const raw = localStorage.getItem(STORAGE_LOGS);
@@ -438,6 +441,7 @@ const RutinaGym: React.FC = () => {
       return {};
     }
   });
+  
   const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
     (localStorage.getItem("rg-selectedDay") as keyof typeof rutina) || "lunes"
   );
@@ -452,6 +456,7 @@ const RutinaGym: React.FC = () => {
       localStorage.setItem(STORAGE_DONE, JSON.stringify(done));
     } catch {}
   }, [done]);
+
   // Persistencia de logs (peso/reps)
   useEffect(() => {
     try {
@@ -526,18 +531,25 @@ const RutinaGym: React.FC = () => {
 
     data.ejercicios.forEach((ej, i) => {
       const idx = `E${i + 1}`;
-      const cur = getLog(ej.id);
-      const peso = (cur?.peso ?? "___").toString().trim() || "___";
-      const reps = (cur?.reps ?? "___").toString().trim() || "___";
-      lineas.push(
-        `${idx} ${ej.nombre}: ${peso} kg  |  Reps: ${reps}  |  RPE objetivo: ${ej.rpe}`
-      );
+      const sets = getSets(ej.id, ej.series);
+
+      // Compacto: "80×10 | 80×9 | 75×10"
+      const serial = sets
+        .map((s) => {
+          const p = (s.peso ?? "").toString().trim();
+          const r = (s.reps ?? "").toString().trim();
+          const pp = p === "" ? "___" : p;
+          const rr = r === "" ? "___" : r;
+          return `${pp}×${rr}`;
+        })
+        .join(" | ");
+
+      lineas.push(`${idx} ${ej.nombre}: ${serial}  |  RPE objetivo: ${ej.rpe}`);
     });
 
     lineas.push("");
     lineas.push("Notas rápidas: ____________________________");
 
-    // 👇 la línea que causaba el error está corregida acá
     const texto = lineas.join("\n");
 
     try {
@@ -570,18 +582,80 @@ const RutinaGym: React.FC = () => {
       return copy;
     });
     setLogs((prev) => {
-      const copy = { ...prev };
+      const copy: typeof prev = { ...prev };
       Object.keys(copy).forEach((k) => {
         if (k.startsWith(`${selectedDay}:`)) delete copy[k];
       });
       return copy;
     });
   };
-  const getLog = (id?: string) => logs[keyFor(id)] ?? { peso: "", reps: "" };
-  const updateLog = (id: string | undefined, field: "peso" | "reps", value: string) => {
-    const k = keyFor(id);
-    setLogs((prev) => ({ ...prev, [k]: { ...prev[k], [field]: value } }));
+
+  // Devuelve el mínimo de series sugerido a partir de ej.series
+  const minSeriesFrom = (series: Series): number => {
+    if (typeof series === "number") return series;
+    const [min] = seriesToRange(series);
+    return min;
   };
+
+  // Lee sets guardados; si no hay, usa fallback (uno o min sugerido) SIN mutar estado
+  const getSets = (id: string | undefined, series: Series) => {
+    const k = keyFor(id);
+    const entry = logs[k];
+
+    // Compatibilidad con la versión anterior (un solo peso/reps)
+    if (entry && "peso" in entry) {
+      const one = [{ peso: entry.peso, reps: entry.reps }];
+      return one;
+    }
+
+    const sets = (entry && "sets" in entry ? entry.sets : undefined) ?? [];
+    if (sets.length > 0) return sets;
+
+    // Placeholder visual: cantidad mínima sugerida
+    const n = Math.max(1, minSeriesFrom(series));
+    return Array.from({ length: n }, () => ({ peso: "", reps: "" }));
+  };
+
+  const ensureEntry = (k: string) => {
+    const e = logs[k];
+    if (!e || ("peso" in e && !("sets" in (e as any)))) {
+      // Migrar (si existía peso/reps único)
+      const migrated = "peso" in (e || {}) ? [{ peso: (e as any).peso, reps: (e as any).reps }] : [];
+      setLogs((prev) => ({ ...prev, [k]: { sets: migrated } }));
+      return { sets: migrated };
+    }
+    return e as { sets?: Array<{ peso?: string; reps?: string }> };
+  };
+
+  const setSetValue = (id: string | undefined, idx: number, field: "peso" | "reps", value: string) => {
+    const k = keyFor(id);
+    // Asegurar entrada
+    const entry = ensureEntry(k);
+    const current = (entry.sets ?? []).slice();
+    // Expandir si hace falta
+    while (current.length <= idx) current.push({ peso: "", reps: "" });
+    current[idx] = { ...current[idx], [field]: value };
+
+    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+  };
+
+  const addSet = (id: string | undefined, series: Series) => {
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    const current = (entry.sets ?? []).slice();
+    current.push({ peso: "", reps: "" });
+    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+  };
+
+  const removeSet = (id: string | undefined, idx: number) => {
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    const current = (entry.sets ?? []).slice();
+    if (current.length === 0) return;
+    current.splice(idx, 1);
+    setLogs((prev) => ({ ...prev, [k]: { sets: current } }));
+  };
+
   const completedCount = day.ejercicios.reduce(
     (acc, e) => acc + (isDone(e.id) ? 1 : 0),
     0
@@ -741,29 +815,23 @@ const RutinaGym: React.FC = () => {
                     Series
                   </th>
                   <th
-  scope="col"
-  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
->
-  Reps Objetivo
-</th>
-<th
-  scope="col"
-  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
->
-  Peso (kg)
-</th>
-<th
-  scope="col"
-  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
->
-  Reps reales
-</th>
-<th
-  scope="col"
-  className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
->
-  RPE
-</th>
+                    scope="col"
+                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+                  >
+                    Reps Objetivo
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+                  >
+                    Series (kg × reps)
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
+                  >
+                    RPE
+                  </th>
                   <th
                     scope="col"
                     className="px-4 py-3 text-center text-sm font-semibold text-slate-300 print:text-slate-800"
@@ -805,36 +873,56 @@ const RutinaGym: React.FC = () => {
                         {ej.series}
                       </td>
                       <td className="px-4 py-4 text-center font-mono text-slate-700">
-  {ej.reps}
-</td>
+                        {ej.reps}
+                      </td>
 
-{/* NUEVO: Peso (kg) */}
-<td className="px-4 py-4 text-center">
-  <input
-    type="number"
-    inputMode="decimal"
-    placeholder="kg"
-    value={getLog(ej.id).peso ?? ""}
-    onChange={(e) => updateLog(ej.id, "peso", e.target.value)}
-    className="w-20 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-  />
-</td>
+                      {/* NUEVO: editor compacto de series múltiples */}
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {getSets(ej.id, ej.series).map((s, sidx) => (
+                            <div key={sidx} className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="kg"
+                                value={s.peso ?? ""}
+                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
+                                className="w-16 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                              <span className="text-slate-600 text-sm">×</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder="reps"
+                                value={s.reps ?? ""}
+                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
+                                className="w-14 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeSet(ej.id, sidx)}
+                                className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                                title="Quitar serie"
+                              >
+                                –
+                              </button>
+                            </div>
+                          ))}
 
-{/* NUEVO: Reps reales */}
-<td className="px-4 py-4 text-center">
-  <input
-    type="number"
-    inputMode="numeric"
-    placeholder="reps"
-    value={getLog(ej.id).reps ?? ""}
-    onChange={(e) => updateLog(ej.id, "reps", e.target.value)}
-    className="w-20 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
-  />
-</td>
+                          <button
+                            type="button"
+                            onClick={() => addSet(ej.id, ej.series)}
+                            className="px-2 py-1 text-xs rounded-md border border-slate-400 hover:bg-slate-200"
+                            title="Agregar serie"
+                          >
+                            + Añadir serie
+                          </button>
+                        </div>
+                      </td>
 
-<td className="px-4 py-4 text-center font-bold text-slate-700">
-  {ej.rpe}
-</td>
+                      <td className="px-4 py-4 text-center font-bold text-slate-700">
+                        {ej.rpe}
+                      </td>
                       <td className="px-4 py-4 text-center font-mono text-sm text-slate-600">
                         {ej.tempo || "—"}
                       </td>
