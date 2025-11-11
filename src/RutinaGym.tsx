@@ -795,11 +795,36 @@ const RutinaGym: React.FC = () => {
                         {ej.series}
                       </td>
                       <td className="px-4 py-4 text-center font-mono text-slate-700">
-                        {ej.reps}
-                      </td>
-                      <td className="px-4 py-4 text-center font-bold text-slate-700">
-                        {ej.rpe}
-                      </td>
+  {ej.reps}
+</td>
+
+{/* NUEVO: Peso (kg) */}
+<td className="px-4 py-4 text-center">
+  <input
+    type="number"
+    inputMode="decimal"
+    placeholder="kg"
+    value={getLog(ej.id).peso ?? ""}
+    onChange={(e) => updateLog(ej.id, "peso", e.target.value)}
+    className="w-20 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+</td>
+
+{/* NUEVO: Reps reales */}
+<td className="px-4 py-4 text-center">
+  <input
+    type="number"
+    inputMode="numeric"
+    placeholder="reps"
+    value={getLog(ej.id).reps ?? ""}
+    onChange={(e) => updateLog(ej.id, "reps", e.target.value)}
+    className="w-20 text-center px-2 py-1 rounded-md border border-slate-400 bg-white/70 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+</td>
+
+<td className="px-4 py-4 text-center font-bold text-slate-700">
+  {ej.rpe}
+</td>
                       <td className="px-4 py-4 text-center font-mono text-sm text-slate-600">
                         {ej.tempo || "—"}
                       </td>
