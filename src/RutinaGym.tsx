@@ -818,6 +818,17 @@ const RutinaGym: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [sessionStartTime] = useState<number>(() => Date.now());
   const [showLegend, setShowLegend] = useState(false);
+  // === Resumen EN CURSO (tick para refrescar minutos) ===
+const [nowTick, setNowTick] = useState(0);
+useEffect(() => {
+  // Refresca cada 30s para que el contador de minutos avance sin interacción
+  const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
+  return () => clearInterval(id);
+}, []);
+
+// Minutos transcurridos desde que se montó la sesión actual
+const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTime) / 60000));
+
   const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
 
   // === NUEVOS ESTADOS: Peso Corporal y Notas ===
@@ -1347,15 +1358,16 @@ const RutinaGym: React.FC = () => {
     return min;
   };
 
-  const getSets = (id: string | undefined, series: Series) => {
-    const k = keyFor(id);
-    const entry = logs[k];
-    const sets = entry?.sets ?? [];
-    if (sets.length > 0) return sets;
+const getSets = (id: string | undefined, _series: Series) => {
+  const k = keyFor(id);
+  const entry = logs[k];
+  const sets = entry?.sets ?? [];
+  if (sets.length > 0) return sets;
 
-    const n = Math.max(1, minSeriesFrom(series));
-    return Array.from({ length: n }, () => ({ peso: "", reps: "", rir: "" }));
-  };
+  // Siempre 1 set vacío por defecto
+  return [{ peso: "", reps: "", rir: "" }];
+};
+
 
   const ensureEntry = (k: string) => {
     const e = logs[k];
@@ -1438,16 +1450,20 @@ const RutinaGym: React.FC = () => {
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
-  const clearEmptySets = (id: string | undefined, series: Series) => {
-    const k = keyFor(id);
-    const entry = ensureEntry(k);
-    let current = (entry.sets ?? []).slice();
-    current = current.filter((s) => isFilled(s));
-    if (current.length === 0) {
-      current = Array.from({ length: Math.max(1, minSeriesFrom(series)) }, () => ({ peso: "", reps: "", rir: "" }));
-    }
-    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
-  };
+ const clearEmptySets = (id: string | undefined, _series: Series) => {
+  const k = keyFor(id);
+  const entry = ensureEntry(k);
+  let current = (entry.sets ?? []).slice();
+  current = current.filter((s) => isFilled(s));
+
+  // Si todas estaban vacías, dejamos exactamente 1 fila vacía
+  if (current.length === 0) {
+    current = [{ peso: "", reps: "", rir: "" }];
+  }
+
+  setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+};
+
 
   const setAltName = (id: string | undefined, alt: string | undefined) => {
     const k = keyFor(id);
@@ -1505,7 +1521,7 @@ const RutinaGym: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0">
       <div className="max-w-7xl mx-auto">
         {/* Header compacto */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-3 md:p-4 mb-3 border border-slate-700 print:shadow-none print:border-0 print:bg-white">
+        <div className="bg-slate-800 rounded-lg shadow-xl p-2 md:p-4 mb-2 border border-slate-700 print:shadow-none print:border-0 print:bg-white">
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center">
               <div>
@@ -1516,7 +1532,7 @@ const RutinaGym: React.FC = () => {
               <div className="flex gap-1">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
-                  className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 text-xs rounded transition print:hidden"
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 text-[11px] rounded transition print:hidden"
                 >
                   📊 ({history.length})
                 </button>
@@ -1603,23 +1619,89 @@ const RutinaGym: React.FC = () => {
             </button>
           ))}
         </div>
+{/* STATUS BAR — mobile-first + sticky */}
+<div
+  className="sticky top-[calc(env(safe-area-inset-top)+8px)] z-30 print:hidden"
+  style={{ WebkitBackdropFilter: 'blur(6px)', backdropFilter: 'blur(6px)' }}
+>
+  <div className="bg-slate-800/85 border border-slate-700 rounded-lg px-2 py-1.5 mb-3 overflow-x-auto no-scrollbar">
+    {/* Línea única (iPhone): chips desplazables */}
+    <div className="flex items-center gap-2 whitespace-nowrap md:hidden">
+      {/* Peso corporal */}
+      <div className="flex items-center gap-1 bg-slate-700 rounded px-2 py-1">
+        <span className="text-xs text-slate-300">⚖️</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={bodyWeight}
+          onChange={(e) => setBodyWeight(e.target.value)}
+          placeholder="kg"
+          className="w-16 text-xs font-semibold bg-transparent outline-none text-slate-100 placeholder:text-slate-400"
+        />
+      </div>
 
-        {/* NUEVO: Input de Peso Corporal - ACTUALIZADO */}
-        <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:hidden">
-          <input
-            type="number"
-            inputMode="decimal"
-            value={bodyWeight}
-            onChange={(e) => setBodyWeight(e.target.value)}
-            placeholder="⚖️ Peso corporal (kg)"
-            className="w-full md:w-64 px-3 py-2 rounded bg-white/90 text-slate-800 text-sm font-semibold"
-          />
-          {bodyWeight && (
-            <div className="text-xs text-slate-400 mt-1">
-              ✓ Será guardado al finalizar sesión
-            </div>
-          )}
+      {/* En curso */}
+      <div className="flex items-center gap-1 bg-emerald-800/70 rounded px-2 py-1">
+        <span className="text-xs">🟢 {new Date().toLocaleDateString('es-AR')}</span>
+        <span className="text-[10px] bg-emerald-900/70 rounded px-1 py-[2px] text-white font-mono">
+          {completedCount}/{day.ejercicios.length}
+        </span>
+        <span className="text-xs font-semibold">{currentVolume} kg</span>
+        <span className="text-xs">{elapsedMin} min</span>
+      </div>
+
+      {/* Última sesión (si existe) */}
+      {previousSession && (
+        <div className="flex items-center gap-1 bg-slate-700 rounded px-2 py-1">
+          <span className="text-xs">🔄 {formatDate(previousSession.date).split(',')[0]}</span>
+          <span className="text-xs font-semibold">{previousSession.totalVolume} kg</span>
+          <span className="text-xs">{previousSession.duration ?? '–'} min</span>
         </div>
+      )}
+    </div>
+
+    {/* Layout para md+ (se muestra en iPad/desktop) */}
+    <div className="hidden md:grid md:grid-cols-3 md:items-center md:gap-2 text-xs">
+      {/* Col 1: peso */}
+      <div className="flex items-center gap-2">
+        <span className="text-slate-300">⚖️ Peso corporal</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={bodyWeight}
+          onChange={(e) => setBodyWeight(e.target.value)}
+          placeholder="kg"
+          className="w-20 px-2 py-1 rounded bg-white/90 text-slate-800 text-xs font-semibold"
+        />
+        {bodyWeight && <span className="text-[10px] text-slate-400">✓ al finalizar</span>}
+      </div>
+
+      {/* Col 2: en curso */}
+      <div className="flex items-center gap-3 justify-center">
+        <span>🟢 {new Date().toLocaleDateString('es-AR')}</span>
+        <span className="px-2 py-0.5 rounded bg-slate-700 text-white font-mono">
+          {completedCount}/{day.ejercicios.length}
+        </span>
+        <span className="font-semibold">{currentVolume} kg</span>
+        <span>{elapsedMin} min</span>
+      </div>
+
+      {/* Col 3: última sesión */}
+      <div className="flex items-center gap-3 justify-end text-slate-300">
+        {previousSession ? (
+          <>
+            <span>🔄 {formatDate(previousSession.date).split(',')[0]}</span>
+            <span className="font-semibold">{previousSession.totalVolume} kg</span>
+            <span>{previousSession.duration ?? '–'} min</span>
+          </>
+        ) : (
+          <span className="text-slate-500">Sin sesiones previas</span>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
+
 
         {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
         {showHistory && (
@@ -1708,19 +1790,8 @@ const RutinaGym: React.FC = () => {
           </div>
         )}
 
-        {/* Comparación con sesión anterior - más compacto */}
-        {previousSession && !showHistory && (
-          <div className="bg-slate-800 rounded-lg p-2 mb-3 border border-slate-700 text-xs">
-            <div className="flex justify-between text-slate-300">
-              <span>🔄 {formatDate(previousSession.date).split(',')[0]}</span>
-              <span className="font-bold">{previousSession.totalVolume} kg</span>
-              <span>{previousSession.duration}min</span>
-            </div>
-          </div>
-        )}
-
         {/* Tabla de ejercicios - COMPACTA */}
-        <div className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white mb-3">
+        <div className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white mb-2">
           <div className="bg-slate-700 p-2 border-b border-slate-600 print:bg-white print:border-b">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-sm md:text-base font-bold text-white print:text-slate-900">
@@ -2176,11 +2247,18 @@ const RutinaGym: React.FC = () => {
       )}
 
       <style>{`
-        @media print {
-          * { box-shadow: none !important; }
-          a, button { display: none !important; }
-        }
-      `}</style>
+  @media print {
+    * { box-shadow: none !important; }
+    a, button { display: none !important; }
+  }
+  
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  
+  @supports (padding-top: env(safe-area-inset-top)) {
+    :root { --safe-top: env(safe-area-inset-top); }
+  }
+`}</style>
     </div>
   );
 };
