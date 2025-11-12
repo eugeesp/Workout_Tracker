@@ -818,6 +818,10 @@ const RutinaGym: React.FC = () => {
   const [showLegend, setShowLegend] = useState(false);
   const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
 
+  // === NUEVOS ESTADOS: Peso Corporal y Notas ===
+  const [bodyWeight, setBodyWeight] = useState<string>("");
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
+
   // === SELECTOR INTELIGENTE (estado) ===
   const [selectorOpen, setSelectorOpen] = useState<{ open: boolean; targetId?: string; grupo?: Grupo; mode?: "replace" | "add" }>({ open: false });
   const [searchTerm, setSearchTerm] = useState("");
@@ -873,6 +877,20 @@ const RutinaGym: React.FC = () => {
     if (min === null || min === undefined) return false;
     if (max === null || max === undefined) return true; // max opcional
     return max <= min;
+  };
+
+  // Helper para actualizar notas de ejercicio
+  const setExerciseNote = (exerciseId: string | undefined, note: string) => {
+    if (!exerciseId) return;
+    setExerciseNotes((prev) => ({
+      ...prev,
+      [exerciseId]: note.trim() || undefined,
+    }));
+  };
+
+  const getExerciseNote = (exerciseId: string | undefined): string => {
+    if (!exerciseId) return "";
+    return exerciseNotes[exerciseId] ?? "";
   };
 
   // Cargar datos desde IndexedDB al montar
@@ -1517,6 +1535,18 @@ const RutinaGym: React.FC = () => {
           ))}
         </div>
 
+        {/* NUEVO: Input de Peso Corporal */}
+        <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:hidden">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={bodyWeight}
+            onChange={(e) => setBodyWeight(e.target.value)}
+            placeholder="⚖️ Peso corporal (kg)"
+            className="w-full md:w-64 px-3 py-2 rounded bg-white/90 text-slate-800 text-sm font-semibold"
+          />
+        </div>
+
         {/* Modal de Historial */}
         {showHistory && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -1631,7 +1661,6 @@ const RutinaGym: React.FC = () => {
                 >
                   Reset
                 </button>
-                {/* ✅ Nuevo: agregar ejercicio (abre selector en modo add, por grupo opcional) */}
                 <button
                   onClick={() => setSelectorOpen({ open: true, mode: "add", grupo: undefined })}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
@@ -1690,7 +1719,6 @@ const RutinaGym: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              // abrir selector inteligente en modo replace
                               setSelectorOpen({ open: true, targetId: ej.id, grupo: ej.grupo, mode: "replace" });
                             }}
                             className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70 w-fit"
@@ -1698,7 +1726,6 @@ const RutinaGym: React.FC = () => {
                             Reemplazar
                           </button>
 
-                          {/* Nuevo: controles de reordenar y eliminar */}
                           <div className="flex gap-1 mt-1">
                             <button
                               onClick={() => moveExercise(selectedDay, ej.id!, "up")}
@@ -1741,7 +1768,6 @@ const RutinaGym: React.FC = () => {
                             const [rirMin, rirMax] = parseRIR(s.rir);
                             return (
                               <div key={sidx} className="flex items-center gap-0.5 flex-wrap">
-                                {/* Reps */}
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -1751,10 +1777,8 @@ const RutinaGym: React.FC = () => {
                                   className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
                                 />
                                 
-                                {/* × */}
                                 <span className="text-slate-600 text-xs">×</span>
                                 
-                                {/* Peso */}
                                 <input
                                   type="number"
                                   inputMode="decimal"
@@ -1764,10 +1788,8 @@ const RutinaGym: React.FC = () => {
                                   className="w-12 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
                                 />
                                 
-                                {/* × */}
                                 <span className="text-slate-600 text-xs">×</span>
                                 
-                                {/* RIR Min */}
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -1778,10 +1800,8 @@ const RutinaGym: React.FC = () => {
                                   title="RIR Mínimo (requerido)"
                                 />
                                 
-                                {/* - (separador) */}
                                 <span className="text-slate-600 text-xs">−</span>
                                 
-                                {/* RIR Max */}
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -1792,7 +1812,6 @@ const RutinaGym: React.FC = () => {
                                   title="RIR Máximo (opcional)"
                                 />
                                 
-                                {/* Botón eliminar */}
                                 <button
                                   type="button"
                                   onClick={() => removeSet(ej.id, sidx)}
@@ -1804,7 +1823,7 @@ const RutinaGym: React.FC = () => {
                             );
                           })}
 
-                          <div className="flex gap-0.5 mt-1">
+                          <div className="flex gap-0.5 mt-1 flex-wrap">
                             <button
                               onClick={() => addSet(ej.id)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
@@ -1815,21 +1834,32 @@ const RutinaGym: React.FC = () => {
                               onClick={() => duplicateLastSet(ej.id)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
-                              📝Duplicar última
+                              📝 Duplicar última
                             </button>
                             <button
                               onClick={() => clearEmptySets(ej.id, ej.series)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
-                              🗑️Limpiar vacías
+                              🗑️ Limpiar vacías
                             </button>
-                             <button
+                            <button
                               onClick={() => openOneRMFor(ej.id)}
                               className="px-2 text-[11px] rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
                               title="Calcular 1RM (Epley)"
                             >
                               🧮 1RM
                             </button>
+                          </div>
+
+                          {/* NUEVO: Textarea de notas por ejercicio */}
+                          <div className="mt-2 print:hidden">
+                            <textarea
+                              value={getExerciseNote(ej.id)}
+                              onChange={(e) => setExerciseNote(ej.id, e.target.value)}
+                              placeholder="📝 Notas..."
+                              rows={2}
+                              className="w-full px-2 py-1 text-xs rounded border border-slate-400 bg-white/70 text-slate-800 resize-none"
+                            />
                           </div>
                         </div>
                       </td>
@@ -1919,7 +1949,7 @@ const RutinaGym: React.FC = () => {
         >
           <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-4 border border-slate-700">
             <div className="flex items-center justify-between mb-2">
-                           <h3 className="text-white font-bold text-sm">🔎 Seleccionar ejercicio</h3>
+              <h3 className="text-white font-bold text-sm">🔎 Seleccionar ejercicio</h3>
               <div className="flex gap-2">
                 <button
                   onClick={() => setSelectorOpen({ open: false })}
@@ -1970,7 +2000,7 @@ const RutinaGym: React.FC = () => {
             <div className="mt-3 flex gap-2 justify-end">
               <button
                 onClick={() => {
-                  if (selectorOpen.targetId) setAltName(selectorOpen.targetId, undefined); // restaurar original
+                  if (selectorOpen.targetId) setAltName(selectorOpen.targetId, undefined);
                   setSelectorOpen({ open: false });
                 }}
                 className="px-3 py-1 rounded bg-slate-600 text-white text-sm"
