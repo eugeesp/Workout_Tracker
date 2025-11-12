@@ -89,7 +89,7 @@ interface DiaRutina {
 }
 
 interface SessionExercise {
-  sets: Array<{ peso?: string; reps?: string }>;
+  sets: Array<{ peso?: string; reps?: string; rir?: string }>;
   alt?: string;
   completed: boolean;
 }
@@ -850,18 +850,29 @@ const RutinaGym: React.FC = () => {
     return Number.isFinite(n) ? n : NaN;
   };
 
-  const computeEpley = (weightStr?: string, repsStr?: string) => {
-    const w = parseNumber(weightStr);
-    const r = parseNumber(repsStr);
-    if (!Number.isFinite(w) || !Number.isFinite(r) || r <= 0) return null;
-    const oneRM = Math.round(w * (1 + r / 30));
-    return {
-      oneRM,
-      p50: Math.round(oneRM * 0.5),
-      p70: Math.round(oneRM * 0.7),
-      p80: Math.round(oneRM * 0.8),
-      p90: Math.round(oneRM * 0.9),
-    };
+  // === Nuevo: parsear RIR desde string "2" o "2-1" a [min, max] ===
+  const parseRIR = (rirStr?: string): [number | null, number | null] => {
+    if (!rirStr || !rirStr.trim()) return [null, null];
+    const parts = rirStr.trim().split("-").map((p) => {
+      const n = parseInt(p.trim(), 10);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    });
+    if (parts[0] === null) return [null, null];
+    return [parts[0], parts[1] ?? null];
+  };
+
+  // === Nuevo: formatear RIR desde [min, max] a string ===
+  const formatRIR = (min?: number | null, max?: number | null): string => {
+    if (min === null || min === undefined) return "";
+    if (max === null || max === undefined) return min.toString();
+    return `${min}-${max}`;
+  };
+
+  // === Nuevo: validar RIR (min requerido, max <= min) ===
+  const isValidRIR = (min?: number | null, max?: number | null): boolean => {
+    if (min === null || min === undefined) return false;
+    if (max === null || max === undefined) return true; // max opcional
+    return max <= min;
   };
 
   // Cargar datos desde IndexedDB al montar
@@ -1265,30 +1276,46 @@ const RutinaGym: React.FC = () => {
     if (sets.length > 0) return sets;
 
     const n = Math.max(1, minSeriesFrom(series));
-    return Array.from({ length: n }, () => ({ peso: "", reps: "" }));
+    return Array.from({ length: n }, () => ({ peso: "", reps: "", rir: "" }));
   };
 
   const ensureEntry = (k: string) => {
     const e = logs[k];
     if (!e) {
-      const created = { sets: [] as Array<{ peso?: string; reps?: string }>, alt: undefined as string | undefined };
+      const created = { sets: [] as Array<{ peso?: string; reps?: string; rir?: string }>, alt: undefined as string | undefined };
       setLogs((prev) => ({ ...prev, [k]: created }));
       return created;
     }
     const neo = { sets: e.sets ?? [], alt: e.alt } as {
-      sets: Array<{ peso?: string; reps?: string }>;
+      sets: Array<{ peso?: string; reps?: string; rir?: string }>;
       alt?: string;
     };
     if (neo !== e) setLogs((prev) => ({ ...prev, [k]: neo }));
     return neo;
   };
 
-  const setSetValue = (id: string | undefined, idx: number, field: "peso" | "reps", value: string) => {
+  const setSetValue = (id: string | undefined, idx: number, field: "peso" | "reps" | "rirMin" | "rirMax", value: string) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    while (current.length <= idx) current.push({ peso: "", reps: "" });
-    current[idx] = { ...current[idx], [field]: value };
+    while (current.length <= idx) current.push({ peso: "", reps: "", rir: "" });
+    
+    const set = current[idx];
+    
+    if (field === "peso" || field === "reps") {
+      current[idx] = { ...set, [field]: value };
+    } else if (field === "rirMin") {
+      const minVal = value.trim() === "" ? null : parseInt(value, 10);
+      const [, maxVal] = parseRIR(set.rir);
+      if (minVal !== null && !Number.isFinite(minVal)) return; // rechazar inválido
+      current[idx] = { ...set, rir: formatRIR(minVal, maxVal) };
+    } else if (field === "rirMax") {
+      const [minVal] = parseRIR(set.rir);
+      const maxVal = value.trim() === "" ? null : parseInt(value, 10);
+      if (maxVal !== null && !Number.isFinite(maxVal)) return; // rechazar inválido
+      current[idx] = { ...set, rir: formatRIR(minVal, maxVal) };
+    }
+    
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
@@ -1296,7 +1323,7 @@ const RutinaGym: React.FC = () => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    current.push({ peso: "", reps: "" });
+    current.push({ peso: "", reps: "", rir: "" });
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
@@ -1319,8 +1346,8 @@ const RutinaGym: React.FC = () => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "" };
-    current.push({ peso: last.peso ?? "", reps: last.reps ?? "" });
+    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "", rir: "" };
+    current.push({ peso: last.peso ?? "", reps: last.reps ?? "", rir: last.rir ?? "" });
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
@@ -1330,7 +1357,7 @@ const RutinaGym: React.FC = () => {
     let current = (entry.sets ?? []).slice();
     current = current.filter((s) => isFilled(s));
     if (current.length === 0) {
-      current = Array.from({ length: Math.max(1, minSeriesFrom(series)) }, () => ({ peso: "", reps: "" }));
+      current = Array.from({ length: Math.max(1, minSeriesFrom(series)) }, () => ({ peso: "", reps: "", rir: "" }));
     }
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
@@ -1536,7 +1563,10 @@ const RutinaGym: React.FC = () => {
 
                           const displayEx = exData.alt || originalEx.nombre;
                           const setsStr = exData.sets
-                            .map((s) => `${s.peso}×${s.reps}`)
+                            .map((s) => {
+                              const rir = s.rir ? ` (${s.rir})` : "";
+                              return `${s.peso}×${s.reps}${rir}`;
+                            })
                             .join(" | ");
 
                           return (
@@ -1622,7 +1652,7 @@ const RutinaGym: React.FC = () => {
                   </th>
                   <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">S</th>
                   <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">Reps</th>
-                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">kg × reps</th>
+                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">reps × kg × RIR</th>
                   <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">RPE</th>
                 </tr>
               </thead>
@@ -1707,60 +1737,98 @@ const RutinaGym: React.FC = () => {
 
                       <td className="px-2 py-2">
                         <div className="flex flex-col gap-1">
-                          {getSets(ej.id, ej.series).map((s, sidx) => (
-                            <div key={sidx} className="flex items-center gap-0.5">
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                placeholder="kg"
-                                value={s.peso ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
-                                className="w-12 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                              />
-                              <span className="text-slate-600 text-xs">×</span>
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                placeholder="r"
-                                value={s.reps ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
-                                className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeSet(ej.id, sidx)}
-                                className="px-1 text-xs rounded border border-slate-400 hover:bg-slate-200"
-                              >
-                                −
-                              </button>
-                            </div>
-                          ))}
+                          {getSets(ej.id, ej.series).map((s, sidx) => {
+                            const [rirMin, rirMax] = parseRIR(s.rir);
+                            return (
+                              <div key={sidx} className="flex items-center gap-0.5 flex-wrap">
+                                {/* Reps */}
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  placeholder="r"
+                                  value={s.reps ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
+                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                                />
+                                
+                                {/* × */}
+                                <span className="text-slate-600 text-xs">×</span>
+                                
+                                {/* Peso */}
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  placeholder="kg"
+                                  value={s.peso ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
+                                  className="w-12 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                                />
+                                
+                                {/* × */}
+                                <span className="text-slate-600 text-xs">×</span>
+                                
+                                {/* RIR Min */}
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  placeholder="RIR"
+                                  value={rirMin ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "rirMin", e.target.value)}
+                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                                  title="RIR Mínimo (requerido)"
+                                />
+                                
+                                {/* - (separador) */}
+                                <span className="text-slate-600 text-xs">−</span>
+                                
+                                {/* RIR Max */}
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  placeholder="RIR"
+                                  value={rirMax ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "rirMax", e.target.value)}
+                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
+                                  title="RIR Máximo (opcional)"
+                                />
+                                
+                                {/* Botón eliminar */}
+                                <button
+                                  type="button"
+                                  onClick={() => removeSet(ej.id, sidx)}
+                                  className="px-1 text-xs rounded border border-slate-400 hover:bg-slate-200"
+                                >
+                                  −
+                                </button>
+                              </div>
+                            );
+                          })}
 
                           <div className="flex gap-0.5 mt-1">
-                            <button
-                              onClick={() => openOneRMFor(ej.id)}
-                              className="px-2 text-[11px] rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
-                              title="Calcular 1RM (Epley)"
-                            >
-                              🧮 1RM
-                            </button>
                             <button
                               onClick={() => addSet(ej.id)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
-                              +
+                              ➕ Agregar serie
                             </button>
                             <button
                               onClick={() => duplicateLastSet(ej.id)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
-                              Dup
+                              📝Duplicar última
                             </button>
                             <button
                               onClick={() => clearEmptySets(ej.id, ej.series)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
-                              Limp
+                              🗑️Limpiar vacías
+                            </button>
+                             <button
+                              onClick={() => openOneRMFor(ej.id)}
+                              className="px-2 text-[11px] rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
+                              title="Calcular 1RM (Epley)"
+                            >
+                              🧮 1RM
                             </button>
                           </div>
                         </div>
@@ -1851,7 +1919,7 @@ const RutinaGym: React.FC = () => {
         >
           <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-4 border border-slate-700">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-white font-bold text-sm">🔎 Seleccionar ejercicio</h3>
+                           <h3 className="text-white font-bold text-sm">🔎 Seleccionar ejercicio</h3>
               <div className="flex gap-2">
                 <button
                   onClick={() => setSelectorOpen({ open: false })}
@@ -1996,6 +2064,27 @@ const RutinaGym: React.FC = () => {
       `}</style>
     </div>
   );
+};
+
+// === Calculadora Epley para 1RM ===
+const computeEpley = (weightStr?: string, repsStr?: string) => {
+  const weight = parseFloat((weightStr ?? "").toString().replace(",", "."));
+  const reps = parseInt((repsStr ?? "").toString(), 10);
+  
+  if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) {
+    return null;
+  }
+  
+  // Fórmula Epley: 1RM = peso × (1 + reps/30)
+  const oneRM = weight * (1 + reps / 30);
+  
+  return {
+    oneRM: Math.round(oneRM * 10) / 10,
+    p50: Math.round((oneRM * 0.5) * 10) / 10,
+    p70: Math.round((oneRM * 0.7) * 10) / 10,
+    p80: Math.round((oneRM * 0.8) * 10) / 10,
+    p90: Math.round((oneRM * 0.9) * 10) / 10,
+  };
 };
 
 export default RutinaGym;
