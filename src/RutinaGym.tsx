@@ -91,6 +91,7 @@ interface DiaRutina {
 interface SessionExercise {
   sets: Array<{ peso?: string; reps?: string; rir?: string }>;
   alt?: string;
+  notes?: string;  // NUEVO
   completed: boolean;
 }
 
@@ -99,6 +100,7 @@ interface WorkoutSession {
   day: keyof typeof rutina;
   exercises: Record<string, SessionExercise>;
   totalVolume: number;
+  bodyWeight?: number;  // NUEVO
   duration?: number;
 }
 
@@ -806,7 +808,7 @@ const RutinaGym: React.FC = () => {
   const [done, setDone] = useState<Record<string, boolean>>({});
   
   const [logs, setLogs] = useState<
-    Record<string, { sets?: Array<{ peso?: string; reps?: string }>; alt?: string }>
+    Record<string, { sets?: Array<{ peso?: string; reps?: string; rir?: string }>; alt?: string; notes?: string }>
   >({});
   
   const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
@@ -886,6 +888,10 @@ const RutinaGym: React.FC = () => {
       ...prev,
       [exerciseId]: note.trim() || undefined,
     }));
+    // Sincronizar con logs también
+    const k = keyFor(exerciseId);
+    const entry = ensureEntry(k);
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, notes: note.trim() || undefined } }));
   };
 
   const getExerciseNote = (exerciseId: string | undefined): string => {
@@ -903,7 +909,33 @@ const RutinaGym: React.FC = () => {
         if (historyData) setHistory(historyData);
         if (currentData) {
           setDone(currentData.done || {});
-          setLogs(currentData.logs || {});
+          // Migración: asegurar que cada entry tiene notes
+          const migratedLogs = currentData.logs || {};
+          Object.keys(migratedLogs).forEach((k) => {
+            if (!migratedLogs[k].notes) {
+              migratedLogs[k].notes = undefined;
+            }
+          });
+          setLogs(migratedLogs);
+          
+          // Cargar bodyWeight si existe
+          if (currentData.bodyWeight) {
+            setBodyWeight(currentData.bodyWeight.toString());
+          }
+          
+          // Cargar exerciseNotes desde logs
+          const loadedNotes: Record<string, string> = {};
+          Object.keys(migratedLogs).forEach((k) => {
+            const notes = migratedLogs[k].notes;
+            if (notes && notes.trim()) {
+              // Extraer el exerciseId de la clave (formato: "dia:exerciseId")
+              const exerciseId = k.split(":")[1];
+              if (exerciseId) {
+                loadedNotes[exerciseId] = notes;
+              }
+            }
+          });
+          setExerciseNotes(loadedNotes);
         }
       } catch (error) {
         console.error("Error loading data:", error);
@@ -957,12 +989,17 @@ const RutinaGym: React.FC = () => {
     }
   }, [history, isLoading]);
 
-  // Guardar sesión actual en IndexedDB
+  // Guardar sesión actual en IndexedDB (MODIFICADO: incluir bodyWeight)
   useEffect(() => {
     if (!isLoading) {
-      saveToDB(STORAGE_CURRENT, { done, logs });
+      const bodyWeightNum = parseFloat(bodyWeight || "0");
+      saveToDB(STORAGE_CURRENT, { 
+        done, 
+        logs,
+        bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined
+      });
     }
-  }, [done, logs, isLoading]);
+  }, [done, logs, bodyWeight, isLoading]);
 
   // =======================
   // RUTINA EDITABLE (estado persistido)
@@ -1102,7 +1139,15 @@ const RutinaGym: React.FC = () => {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
     if (lastSession && Object.keys(logs).length === 0) {
-      setLogs(lastSession.exercises as any);
+      // Migrar las claves de session.exercises (que están guardadas como ej.id)
+      // a las claves que usa `logs` (formato: "dia:ejId")
+      const migrated = Object.fromEntries(
+        Object.entries(lastSession.exercises).map(([exId, exData]) => [
+          `${lastSession.day}:${exId}`,
+          exData,
+        ])
+      );
+      setLogs(migrated as any);
     }
   }, [selectedDay, isLoading, history]);
 
@@ -1241,6 +1286,16 @@ const RutinaGym: React.FC = () => {
       });
       return copy;
     });
+    // Limpiar notas del día
+    setExerciseNotes((prev) => {
+      const copy = { ...prev };
+      day.ejercicios.forEach((ej) => {
+        if (ej.id) delete copy[ej.id];
+      });
+      return copy;
+    });
+    // Limpiar peso corporal
+    setBodyWeight("");
   };
 
   const finalizarSesion = () => {
@@ -1255,6 +1310,7 @@ const RutinaGym: React.FC = () => {
       exercises[ej.id!] = {
         sets: sets,
         alt: entry?.alt,
+        notes: entry?.notes,  // NUEVO
         completed: isDone(ej.id),
       };
 
@@ -1266,19 +1322,23 @@ const RutinaGym: React.FC = () => {
     });
 
     const duration = Math.round((Date.now() - sessionStartTime) / 60000);
+    
+    // Parsear bodyWeight
+    const bodyWeightNum = parseFloat(bodyWeight || "0");
 
     const newSession: WorkoutSession = {
       date: new Date().toISOString(),
       day: selectedDay,
       exercises,
       totalVolume: Math.round(totalVolume),
+      bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined,  // NUEVO
       duration,
     };
 
     setHistory((prev) => [newSession, ...prev]);
     resetDay();
     
-    alert(`✅ Sesión guardada!\n\nVolumen total: ${Math.round(totalVolume)} kg\nDuración: ${duration} min`);
+    alert(`✅ Sesión guardada!\n\nVolumen total: ${Math.round(totalVolume)} kg\nDuración: ${duration} min${bodyWeightNum > 0 ? `\nPeso corporal: ${bodyWeightNum} kg` : ""}`);
   };
 
   const minSeriesFrom = (series: Series): number => {
@@ -1300,13 +1360,22 @@ const RutinaGym: React.FC = () => {
   const ensureEntry = (k: string) => {
     const e = logs[k];
     if (!e) {
-      const created = { sets: [] as Array<{ peso?: string; reps?: string; rir?: string }>, alt: undefined as string | undefined };
+      const created = { 
+        sets: [] as Array<{ peso?: string; reps?: string; rir?: string }>, 
+        alt: undefined as string | undefined,
+        notes: undefined as string | undefined  // NUEVO
+      };
       setLogs((prev) => ({ ...prev, [k]: created }));
       return created;
     }
-    const neo = { sets: e.sets ?? [], alt: e.alt } as {
+    const neo = { 
+      sets: e.sets ?? [], 
+      alt: e.alt,
+      notes: e.notes  // NUEVO
+    } as {
       sets: Array<{ peso?: string; reps?: string; rir?: string }>;
       alt?: string;
+      notes?: string;  // NUEVO
     };
     if (neo !== e) setLogs((prev) => ({ ...prev, [k]: neo }));
     return neo;
@@ -1535,7 +1604,7 @@ const RutinaGym: React.FC = () => {
           ))}
         </div>
 
-        {/* NUEVO: Input de Peso Corporal */}
+        {/* NUEVO: Input de Peso Corporal - ACTUALIZADO */}
         <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:hidden">
           <input
             type="number"
@@ -1545,9 +1614,14 @@ const RutinaGym: React.FC = () => {
             placeholder="⚖️ Peso corporal (kg)"
             className="w-full md:w-64 px-3 py-2 rounded bg-white/90 text-slate-800 text-sm font-semibold"
           />
+          {bodyWeight && (
+            <div className="text-xs text-slate-400 mt-1">
+              ✓ Será guardado al finalizar sesión
+            </div>
+          )}
         </div>
 
-        {/* Modal de Historial */}
+        {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
         {showHistory && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6 border border-slate-700">
@@ -1577,9 +1651,10 @@ const RutinaGym: React.FC = () => {
                           <h3 className="text-lg font-semibold text-white capitalize">
                             {session.day} - {formatDate(session.date)}
                           </h3>
-                          <div className="flex gap-4 mt-1 text-sm text-slate-300">
+                          <div className="flex gap-4 mt-1 text-sm text-slate-300 flex-wrap">
                             <span>💪 Volumen: {session.totalVolume} kg</span>
                             {session.duration && <span>⏱️ {session.duration} min</span>}
+                            {session.bodyWeight && <span>⚖️ {session.bodyWeight} kg</span>}
                           </div>
                         </div>
                       </div>
@@ -1606,12 +1681,21 @@ const RutinaGym: React.FC = () => {
                                 exData.completed ? "bg-slate-600" : "bg-slate-700/50"
                               }`}
                             >
-                              <span className={exData.completed ? "text-white" : "text-slate-400"}>
-                                {exData.completed ? "✓" : "○"} {displayEx}
-                              </span>
-                              <span className="text-slate-300 ml-2 font-mono text-xs">
-                                {setsStr || "—"}
-                              </span>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className={exData.completed ? "text-white" : "text-slate-400"}>
+                                    {exData.completed ? "✓" : "○"} {displayEx}
+                                  </span>
+                                  <span className="text-slate-300 ml-2 font-mono text-xs">
+                                    {setsStr || "—"}
+                                  </span>
+                                </div>
+                                {exData.notes && (
+                                  <span className="text-slate-300 text-xs ml-2 italic">
+                                    📝 {exData.notes}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -1801,7 +1885,7 @@ const RutinaGym: React.FC = () => {
                                 />
                                 
                                 <span className="text-slate-600 text-xs">−</span>
-                                
+                                                                
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -1851,7 +1935,7 @@ const RutinaGym: React.FC = () => {
                             </button>
                           </div>
 
-                          {/* NUEVO: Textarea de notas por ejercicio */}
+                          {/* NUEVO: Textarea de notas por ejercicio - ACTUALIZADO */}
                           <div className="mt-2 print:hidden">
                             <textarea
                               value={getExerciseNote(ej.id)}
@@ -1860,6 +1944,11 @@ const RutinaGym: React.FC = () => {
                               rows={2}
                               className="w-full px-2 py-1 text-xs rounded border border-slate-400 bg-white/70 text-slate-800 resize-none"
                             />
+                            {getExerciseNote(ej.id) && (
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                ✓ Guardada en logs
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
