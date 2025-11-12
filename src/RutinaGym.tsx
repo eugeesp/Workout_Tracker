@@ -824,6 +824,46 @@ const RutinaGym: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  // === Nuevo: Modal 1RM (Epley) ===
+  const [oneRMModal, setOneRMModal] = useState<{
+    open: boolean;
+    exerciseId?: string;
+    currentWeight?: string;
+    currentReps?: string;
+  }>({ open: false });
+
+  const openOneRMFor = (exerciseId?: string) => {
+    // usar último set completado o primer set por defecto
+    const k = `${selectedDay}:${exerciseId ?? ""}`;
+    const filled = (logs[k]?.sets ?? []).filter((s: any) => !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== "");
+    const last = filled.length > 0 ? filled[filled.length - 1] : (getSets(exerciseId, 3)[0] || { peso: "", reps: "" });
+    setOneRMModal({
+      open: true,
+      exerciseId,
+      currentWeight: (last.peso ?? "").toString(),
+      currentReps: (last.reps ?? "").toString(),
+    });
+  };
+
+  const parseNumber = (v?: string) => {
+    const n = parseFloat((v ?? "").toString().replace(",", "."));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const computeEpley = (weightStr?: string, repsStr?: string) => {
+    const w = parseNumber(weightStr);
+    const r = parseNumber(repsStr);
+    if (!Number.isFinite(w) || !Number.isFinite(r) || r <= 0) return null;
+    const oneRM = Math.round(w * (1 + r / 30));
+    return {
+      oneRM,
+      p50: Math.round(oneRM * 0.5),
+      p70: Math.round(oneRM * 0.7),
+      p80: Math.round(oneRM * 0.8),
+      p90: Math.round(oneRM * 0.9),
+    };
+  };
+
   // Cargar datos desde IndexedDB al montar
   useEffect(() => {
     const loadData = async () => {
@@ -1698,6 +1738,13 @@ const RutinaGym: React.FC = () => {
 
                           <div className="flex gap-0.5 mt-1">
                             <button
+                              onClick={() => openOneRMFor(ej.id)}
+                              className="px-2 text-[11px] rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
+                              title="Calcular 1RM (Epley)"
+                            >
+                              🧮 1RM
+                            </button>
+                            <button
                               onClick={() => addSet(ej.id)}
                               className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
                             >
@@ -1872,7 +1919,75 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
       )}
-      
+
+      {/* Modal 1RM (Epley) */}
+      {oneRMModal.open && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4" style={{ zIndex: 10000 }}>
+          <div className="w-full max-w-md bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-sm">🧮 Calculadora 1RM (Epley)</h3>
+              <button
+                onClick={() => setOneRMModal({ open: false })}
+                className="text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-slate-300 text-xs">Peso (kg)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={oneRMModal.currentWeight ?? ""}
+                onChange={(e) => setOneRMModal((s) => ({ ...s, currentWeight: e.target.value }))}
+                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
+                placeholder="kg"
+              />
+
+              <label className="text-slate-300 text-xs">Repeticiones realizadas</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={oneRMModal.currentReps ?? ""}
+                onChange={(e) => setOneRMModal((s) => ({ ...s, currentReps: e.target.value }))}
+                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
+                placeholder="reps"
+              />
+
+              <div className="bg-slate-700 rounded p-3 text-center">
+                {(() => {
+                  const res = computeEpley(oneRMModal.currentWeight, oneRMModal.currentReps);
+                  if (!res) {
+                    return <div className="text-slate-300 text-sm">Introduce peso y repeticiones válidas para ver el 1RM</div>;
+                  }
+                  return (
+                    <div className="text-left">
+                      <div className="text-white font-bold text-lg mb-2">Estimado 1RM: {res.oneRM} kg</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                        <div className="p-2 bg-slate-800 rounded border border-slate-600">50% → <span className="font-semibold text-white">{res.p50} kg</span></div>
+                        <div className="p-2 bg-slate-800 rounded border border-slate-600">70% → <span className="font-semibold text-white">{res.p70} kg</span></div>
+                        <div className="p-2 bg-slate-800 rounded border border-slate-600">80% → <span className="font-semibold text-white">{res.p80} kg</span></div>
+                        <div className="p-2 bg-slate-800 rounded border border-slate-600">90% → <span className="font-semibold text-white">{res.p90} kg</span></div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setOneRMModal({ open: false })}
+                  className="px-3 py-1 rounded bg-indigo-600 text-white text-sm"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @media print {
           * { box-shadow: none !important; }
