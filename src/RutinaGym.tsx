@@ -1215,35 +1215,47 @@ const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTime) / 6000
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   };
-// --- TSV para pegar directo en Google Sheets (modo compacto) ---
-const sanitizeTSV = (v: any): string =>
-  (v ?? "").toString().replace(/\t/g, " ").replace(/\r?\n/g, " / ").trim();
+
+// --- TSV para Google Sheets: 1ª fila = Fecha + Día + (peso en col E),
+// luego ejercicios debajo del Día (col B). Sin encabezados.
+const sanitizeTSV = (v: any): string => {
+  if (v === null || v === undefined) return "";
+  return String(v).replace(/\t/g, " ").replace(/\r?\n/g, " / ").trim();
+};
+
+const asRIR = (v: any): string => {
+  const raw = sanitizeTSV(v);
+  return raw === "" ? "-" : raw;
+};
 
 const generarTablaParaSheets = (): string => {
   const fechaStr = new Date().toISOString().split("T")[0];
-  // Encabezado
-  let tsv = "Fecha\tDía\tEjercicio\tRepeticiones\tRIR\tPeso_Corporal\tNotas\n";
+  let tsv = "";
 
-  // Fila del día (resumen de cabecera)
-  tsv += `${fechaStr}\t${sanitizeTSV(day.nombre)}\t-\t-\t${bodyWeight || ""}\t\n`;
+  // Fila 1 — A: Fecha | B: Día/Grupo | C: (vacío) | D: (vacío) | E: Peso | F: (vacío)
+  const pesoStr = bodyWeight ? sanitizeTSV(bodyWeight) : "";
+  tsv += `${fechaStr}\t${sanitizeTSV(day.nombre)}\t\t\t${pesoStr}\t\n`;
 
-  // Filas de ejercicios (una por ejercicio, sets agregados con coma)
+  // Filas siguientes — A: (vacío) | B: Ejercicio | C: Reps | D: RIR | E: (vacío) | F: Notas
   day.ejercicios.forEach((ej) => {
     const k = keyFor(ej.id);
     const entry = logs[k];
-    const sets = (entry?.sets ?? []).filter(isFilled);
+    const sets = Array.isArray(entry?.sets) ? entry!.sets : [];
 
-    const reps = sets.map((s) => sanitizeTSV(s.reps)).join(",");
-    const rirs = sets.map((s) => sanitizeTSV(s.rir)).join(",");
-    // preferí la nota “live” por ejercicio si existe
+    const repsList = sets.map((s) => sanitizeTSV(s.reps)).join(",");
+    const rirsList = sets.map((s) => asRIR(s.rir)).join(",");
     const nota = sanitizeTSV(getExerciseNote(ej.id) || entry?.notes || "");
 
-    // usar displayName para respetar nombres alternativos
-    tsv += `\t${sanitizeTSV(displayName(ej))}\t${reps}\t${rirs}\t\t${nota}\n`;
+    // Anteponemos tab para dejar la col A vacía y alinear bajo la col B (Día)
+    tsv += `\t${sanitizeTSV(displayName(ej))}\t'${repsList}\t'${rirsList}\t\t${nota}\n`;
   });
 
   return tsv;
 };
+
+
+
+
 
   // Copiar día completo (resumen legible para compartir)
   const copiarDiaCompleto = async () => {
