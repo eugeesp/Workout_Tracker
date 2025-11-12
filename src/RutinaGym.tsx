@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { Download, Info, Printer, BarChart3 } from "lucide-react";
 
 // =======================
 // IndexedDB Helper (para persistencia confiable en iOS)
@@ -1092,85 +1091,54 @@ const RutinaGym: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // Exportar historial como JSON (backup)
-  const exportHistorial = () => {
-    const dataStr = JSON.stringify({ history, current: { done, logs } }, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `rutina-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    alert("✅ Backup descargado! Guárdalo en un lugar seguro.");
-  };
+  // Copiar día completo (resumen legible para compartir)
+  const copiarDiaCompleto = async () => {
+    const lines: string[] = [];
+    const hoy = new Date();
+    lines.push(`🏋️ ${day.nombre}`);
+    lines.push(`📅 ${hoy.toLocaleDateString("es-AR")}`);
+    lines.push("");
 
-  // Importar historial desde JSON
-  const importHistorial = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        
-        if (data.history) {
-          setHistory(data.history);
-          await saveToDB(STORAGE_HISTORY, data.history);
-        }
-        if (data.current) {
-          setDone(data.current.done || {});
-          setLogs(data.current.logs || {});
-          await saveToDB(STORAGE_CURRENT, data.current);
-        }
-        
-        alert("✅ Historial restaurado exitosamente!");
-      } catch (error) {
-        alert("❌ Error al importar el archivo. Asegurate que sea un backup válido.");
-        console.error(error);
-      }
-    };
-    
-    input.click();
-  };
+    day.ejercicios.forEach((ej, i) => {
+      const idx = i + 1;
+      lines.push(`${idx}. ${ej.nombre}`);
+      lines.push(`   Series: ${ej.series} | Reps objetivo: ${ej.reps} | RPE: ${ej.rpe}`);
+      if (ej.tempo) lines.push(`   Tempo: ${ej.tempo}`);
+      if (ej.nota) lines.push(`   💡 ${ej.nota}`);
 
-  const handlePrint = () => window.print();
-
-  const copiarResumen = async (dia: keyof typeof rutina, data: DiaRutina) => {
-    const lineas: string[] = [];
-    lineas.push(`${data.nombre}`);
-    lineas.push("");
-
-    data.ejercicios.forEach((ej, i) => {
-      const idx = `E${i + 1}`;
       const sets = filledSets(ej.id, ej.series);
+      if (sets.length > 0) {
+        lines.push(`   📊 Series realizadas:`);
+        sets.forEach((s, si) => {
+          const peso = (s.peso ?? "").toString().trim() || "0";
+          const reps = (s.reps ?? "").toString().trim() || "0";
+          lines.push(`      ${si + 1}. ${peso} kg × ${reps} reps`);
+        });
+      } else {
+        lines.push(`   📊 Series realizadas: —`);
+      }
 
-      const serial = sets.length > 0
-        ? sets
-            .map((s) => `${(s.peso ?? "").toString().trim()}×${(s.reps ?? "").toString().trim()}`)
-            .join(" | ")
-        : Array.from({ length: Math.max(1, minSeriesFrom(ej.series)) })
-            .map(() => "___×___")
-            .join(" | ");
-
-      lineas.push(`${idx} ${displayName(ej)}: ${serial}  |  RPE objetivo: ${ej.rpe}`);
+      lines.push(`   ✅ Completado: ${isDone(ej.id) ? "SÍ" : "NO"}`);
+      lines.push("");
     });
 
-    lineas.push("");
-    lineas.push("Notas rápidas: ____________________________");
+    lines.push("📈 Resumen del día:");
+    lines.push(`   Ejercicios completados: ${completedCount}/${day.ejercicios.length}`);
+    lines.push(`   Volumen total: ${currentVolume} kg`);
+    lines.push("");
+    lines.push("📝 Notas del entrenamiento:");
+    lines.push("____________________________");
+    lines.push("");
+    lines.push("🎯 Técnica: _______");
+    lines.push("");
+    lines.push("✨ Puntos a mejorar:");
+    lines.push("____________________________");
 
-    const texto = lineas.join("\n");
+    const texto = lines.join("\n");
 
     try {
       await navigator.clipboard.writeText(texto);
-      alert("Resumen copiado. Pegalo en Notas/WhatsApp ✅");
+      alert("✅ Día copiado al portapapeles. Pegalo donde quieras.");
     } catch {
       const ta = document.createElement("textarea");
       ta.value = texto;
@@ -1178,7 +1146,7 @@ const RutinaGym: React.FC = () => {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      alert("Resumen copiado (fallback).");
+      alert("Día copiado (fallback).");
     }
   };
 
@@ -1399,18 +1367,11 @@ const RutinaGym: React.FC = () => {
                   📊 ({history.length})
                 </button>
                 <button
-                  onClick={exportHistorial}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
-                  title="Backup"
-                >
-                  💾
-                </button>
-                <button
-                  onClick={importHistorial}
+                  onClick={copiarDiaCompleto}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
-                  title="Restaurar"
+                  title="Copiar día"
                 >
-                  📂
+                  📋 Copiar día
                 </button>
               </div>
             </div>
@@ -1871,21 +1832,23 @@ const RutinaGym: React.FC = () => {
               {suggestions.length === 0 ? (
                 <div className="text-slate-400 text-sm">No se encontraron ejercicios.</div>
               ) : (
-                suggestions.map((sug) => (
-                  <button
-                    key={sug.id}
-                    onClick={() => {
-                      handleSelectSuggestion(sug);
-                    }}
-                    className="text-left p-2 rounded hover:bg-slate-700 flex justify-between items-center border border-slate-600 bg-slate-700"
-                  >
-                    <div>
-                      <div className="font-semibold text-white text-sm">{sug.nombre}</div>
-                      <div className="text-xs text-slate-300">{sug.tempo ? `${sug.tempo} · ` : ""}{sug.reps} · RPE {sug.rpe}</div>
-                    </div>
-                    <div className="text-xs text-slate-400 capitalize">{sug.grupo}</div>
-                  </button>
-                ))
+                suggestions.map((sug) => {
+                  return (
+                    <button
+                      key={sug.id}
+                      onClick={() => handleSelectSuggestion(sug)}
+                      className="text-left p-2 rounded hover:bg-slate-700 flex justify-between items-center border border-slate-600 bg-slate-700"
+                    >
+                      <div>
+                        <div className="font-semibold text-white text-sm">{sug.nombre}</div>
+                        <div className="text-xs text-slate-300">
+                          {sug.tempo ? `${sug.tempo} · ` : ""}{sug.reps} · RPE {sug.rpe}
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-400 capitalize">{sug.grupo}</div>
+                    </button>
+                  );
+                })
               )}
             </div>
 
