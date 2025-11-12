@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Download, Info, Printer, BarChart3 } from "lucide-react";
 
 // =======================
@@ -102,6 +102,313 @@ interface WorkoutSession {
   totalVolume: number;
   duration?: number;
 }
+
+// =======================
+// Base de Datos de Ejercicios
+// =======================
+
+const ejerciciosDB: Ejercicio[] = [
+  // === ACTIVACIÓN ===
+  {
+    id: "activacion-posterior-polea",
+    nombre: "Activación deltoides posterior (polea alta unilateral)",
+    grupo: "activacion",
+    series: 1,
+    reps: "15-20",
+    rpe: "4-5",
+    tempo: "1-0-3-2",
+    nota: "Enfoque en conexión mente-músculo"
+  },
+  {
+    id: "activacion-posterior-micro",
+    nombre: "Activación deltoides posterior (micro)",
+    grupo: "activacion", 
+    series: 1,
+    reps: "10-15",
+    rpe: "3-4",
+    nota: "Solo MMC, muy ligero"
+  },
+
+  // === PECHO ===
+  {
+    id: "press-banca-barra",
+    nombre: "Press banca (barra plano)",
+    grupo: "pecho",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12", 
+    rpe: "7-8",
+    tempo: "2-0-3-0",
+    nota: "back-off"
+  },
+  {
+    id: "press-inclinado-barra",
+    nombre: "Press inclinado (barra)",
+    grupo: "pecho",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8", 
+    nota: "back-off"
+  },
+  {
+    id: "press-inclinado-mancuernas",
+    nombre: "Press inclinado (mancuernas)",
+    grupo: "pecho",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7",
+    nota: "back-off"
+  },
+  {
+    id: "cruce-poleas-pecho",
+    nombre: "Cruce de poleas (pecho)", 
+    grupo: "pecho",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+
+  // === ESPALDA ===
+  {
+    id: "remo-barra-pesado",
+    nombre: "Remo con barra (pesado)",
+    grupo: "espalda",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "back-off"
+  },
+  {
+    id: "jalon-neutro-paralelo",
+    nombre: "Jalón neutro (agarre paralelo)",
+    grupo: "espalda",
+    series: 3, 
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "espalda alta"
+  },
+  {
+    id: "jalon-prono-pecho",
+    nombre: "Jalón prono al pecho",
+    grupo: "espalda",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7",
+    nota: "control excéntrico"
+  },
+  {
+    id: "remo-t-hammer",
+    nombre: "Remo T / Hammer (controlado)",
+    grupo: "espalda",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7",
+    tempo: "2-1-3-1",
+    nota: "enfoque MMC / escápula"
+  },
+  {
+    id: "jalon-al-pecho",
+    nombre: "Jalón al pecho",
+    grupo: "espalda", 
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7",
+    nota: "lat stretch"
+  },
+
+  // === HOMBROS ===
+  {
+    id: "face-pull-cuerda",
+    nombre: "Face pull (cuerda)",
+    grupo: "hombro",
+    series: 4,
+    reps: "12-15 → 15-20",
+    rpe: "7", 
+    tempo: "1-1-3-1"
+  },
+  {
+    id: "peck-deck-reverse",
+    nombre: "Peck-deck reverse",
+    grupo: "hombro",
+    series: 4,
+    reps: "12-15 → 15-20", 
+    rpe: "7",
+    tempo: "1-0-3-2"
+  },
+  {
+    id: "elevacion-lateral-polea",
+    nombre: "Elevación lateral (polea)",
+    grupo: "hombro",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+  {
+    id: "posterior-polea-cruzada",
+    nombre: "Posterior polea cruzada (unilateral)", 
+    grupo: "hombro",
+    series: 4,
+    reps: "12-15 → 15-20",
+    rpe: "7",
+    tempo: "1-0-3-2"
+  },
+  {
+    id: "press-militar-barra",
+    nombre: "Press militar (barra)",
+    grupo: "hombro",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8", 
+    nota: "controlado"
+  },
+  {
+    id: "pajaros-reverse-fly",
+    nombre: "Pájaros / reverse fly banco inclinado",
+    grupo: "hombro",
+    series: 4,
+    reps: "12-15 → 15-20",
+    rpe: "7",
+    tempo: "1-0-3-2"
+  },
+
+  // === BÍCEPS ===
+  {
+    id: "curl-biceps-barra-w",
+    nombre: "Curl bíceps barra W", 
+    grupo: "biceps",
+    series: 3,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+  {
+    id: "curl-biceps-alternado",
+    nombre: "Curl bíceps alternado",
+    grupo: "biceps",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+  {
+    id: "curl-biceps-variante",
+    nombre: "Curl bíceps (variante libre)",
+    grupo: "biceps", 
+    series: 3,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+
+  // === TRÍCEPS ===
+  {
+    id: "extension-triceps-soga",
+    nombre: "Extensión tríceps soga",
+    grupo: "triceps",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+  {
+    id: "press-frances-barra-w",
+    nombre: "Press francés (barra W)", 
+    grupo: "triceps",
+    series: "3-4",
+    reps: "12-15",
+    rpe: "7",
+    nota: "codos fijos"
+  },
+  {
+    id: "extension-triceps-unilateral",
+    nombre: "Extensión tríceps unilateral",
+    grupo: "triceps",
+    series: "3-4",
+    reps: "12-15",
+    rpe: "7", 
+    tempo: "1-0-3-1"
+  },
+
+  // === PIERNAS ===
+  {
+    id: "sentadilla-barra",
+    nombre: "Sentadilla (barra)",
+    grupo: "pierna",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "back-off"
+  },
+  {
+    id: "hack-squat",
+    nombre: "Hack squat",
+    grupo: "pierna", 
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "back-off"
+  },
+  {
+    id: "curl-femoral-acostado",
+    nombre: "Curl femoral acostado",
+    grupo: "pierna",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  },
+  {
+    id: "extension-cuadriceps",
+    nombre: "Extensión cuádriceps", 
+    grupo: "pierna",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    nota: "pausa"
+  },
+  {
+    id: "peso-muerto-rumano",
+    nombre: "Peso muerto rumano",
+    grupo: "pierna",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "back-off"
+  },
+  {
+    id: "prensa-45",
+    nombre: "Prensa 45°", 
+    grupo: "pierna",
+    series: 3,
+    reps: "8-10 / 9-11 / 10-12",
+    rpe: "7-8",
+    nota: "back-off"
+  },
+  {
+    id: "curl-femoral-variante",
+    nombre: "Curl femoral (acostado o sentado)",
+    grupo: "pierna",
+    series: 4,
+    reps: "12-15",
+    rpe: "7",
+    tempo: "1-0-3-1"
+  }
+];
+
+// Helper para buscar ejercicios por grupo
+const ejerciciosPorGrupo = (grupo: Grupo): Ejercicio[] => {
+  return ejerciciosDB.filter(ej => ej.grupo === grupo);
+};
+
+// Helper para buscar ejercicios por nombre (búsqueda flexible)
+const buscarEjercicios = (termino: string): Ejercicio[] => {
+  const lowerTermino = termino.toLowerCase();
+  return ejerciciosDB.filter(ej => 
+    ej.nombre.toLowerCase().includes(lowerTermino) ||
+    ej.grupo.toLowerCase().includes(lowerTermino)
+  );
+};
 
 // =======================
 // Datos
@@ -490,6 +797,8 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
 
 const STORAGE_HISTORY = "rg-history-v2" as const;
 const STORAGE_CURRENT = "rg-current-v2" as const;
+// ✅ Nuevo: persistir cambios en la rutina editable
+const STORAGE_RUTINA = "rg-rutina-v1" as const;
 
 const RutinaGym: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -509,6 +818,12 @@ const RutinaGym: React.FC = () => {
   const [sessionStartTime] = useState<number>(() => Date.now());
   const [showLegend, setShowLegend] = useState(false);
   const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
+
+  // === SELECTOR INTELIGENTE (estado) ===
+  const [selectorOpen, setSelectorOpen] = useState<{ open: boolean; targetId?: string; grupo?: Grupo; mode?: "replace" | "add" }>({ open: false });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Cargar datos desde IndexedDB al montar
   useEffect(() => {
@@ -532,6 +847,37 @@ const RutinaGym: React.FC = () => {
     loadData();
   }, []);
 
+  // Auto-focus y cálculo de sugerencias cuando se abre el selector
+  useEffect(() => {
+    if (selectorOpen.open) {
+      // small timeout to ensure input is mounted
+      setTimeout(() => searchInputRef.current?.focus(), 60);
+      setSearchTerm(""); // empezar limpio
+      const byGroup = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
+      setSuggestions(byGroup.slice(0, 8));
+    } else {
+      setSuggestions([]);
+      setSearchTerm("");
+    }
+  }, [selectorOpen]);
+
+  // Actualizar sugerencias cuando cambia el término de búsqueda
+  useEffect(() => {
+    if (!selectorOpen.open) return;
+    const term = (searchTerm || "").trim();
+    let results: Ejercicio[] = [];
+    if (term === "") {
+      results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
+    } else {
+      results = buscarEjercicios(term);
+    }
+    // Priorizar mismo grupo si target tiene grupo
+    if (selectorOpen.grupo) {
+      results = results.sort((a, b) => (a.grupo === selectorOpen.grupo ? -1 : 1));
+    }
+    setSuggestions(results.slice(0, 12));
+  }, [searchTerm, selectorOpen]);
+
   useEffect(() => {
     localStorage.setItem("rg-selectedDay", selectedDay);
   }, [selectedDay]);
@@ -550,11 +896,134 @@ const RutinaGym: React.FC = () => {
     }
   }, [done, logs, isLoading]);
 
-  const rutinaConIds = useMemo(() => {
-    return Object.fromEntries(
-      dias.map((d) => [d, withIds(rutina[d], d)])
-    ) as typeof rutina;
+  // =======================
+  // RUTINA EDITABLE (estado persistido)
+  // =======================
+  // Inicializar desde IndexedDB si existe, si no desde la constante `rutina`
+  const [rutinaState, setRutinaState] = useState<typeof rutina>(() => {
+    return Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)])) as typeof rutina;
+  });
+
+  // Cargar rutina persistida al montar (si hay)
+  useEffect(() => {
+    const loadRutina = async () => {
+      try {
+        const stored = await getFromDB(STORAGE_RUTINA);
+        if (stored) {
+          setRutinaState(stored);
+        }
+      } catch (err) {
+        console.error("Error cargando rutina desde DB:", err);
+      }
+    };
+    loadRutina();
   }, []);
+
+  // Guardar rutina cada vez que cambia
+  useEffect(() => {
+    saveToDB(STORAGE_RUTINA, rutinaState).catch((e) => console.error(e));
+  }, [rutinaState]);
+
+  // =======================
+  // Helpers para modificar la rutina (add / remove / update / move)
+  // =======================
+  const updateExercise = (day: keyof typeof rutinaState, ejId: string, patch: Partial<Ejercicio>) => {
+    setRutinaState((prev) => {
+      const copy = { ...prev };
+      copy[day] = {
+        ...copy[day],
+        ejercicios: copy[day].ejercicios.map((ej) => (ej.id === ejId ? { ...ej, ...patch } : ej)),
+      };
+      return copy;
+    });
+  };
+  
+  const addExercise = (day: keyof typeof rutinaState, ejercicio: Ejercicio) => {
+    setRutinaState((prev) => {
+      const copy = { ...prev };
+      const newId = `${day}-E${Date.now().toString(36)}`;
+      copy[day] = {
+        ...copy[day],
+        ejercicios: [...copy[day].ejercicios, { ...ejercicio, id: newId }],
+      };
+      return copy;
+    });
+  };
+  
+  const removeExercise = (day: keyof typeof rutinaState, ejId: string) => {
+    // limpiar logs/done relacionados
+    setDone((d) => {
+      const copy = { ...d };
+      Object.keys(copy).forEach((k) => {
+        if (k.startsWith(`${day}:`) && k.includes(ejId)) delete copy[k];
+      });
+      return copy;
+    });
+    setLogs((l) => {
+      const copy = { ...l };
+      Object.keys(copy).forEach((k) => {
+        if (k.startsWith(`${day}:`) && k.includes(ejId)) delete copy[k];
+      });
+      return copy;
+    });
+
+    setRutinaState((prev) => {
+      const copy = { ...prev };
+      copy[day] = { ...copy[day], ejercicios: copy[day].ejercicios.filter((e) => e.id !== ejId) };
+      return copy;
+    });
+  };
+  
+  const moveExercise = (day: keyof typeof rutinaState, ejId: string, dir: "up" | "down") => {
+    setRutinaState((prev) => {
+      const copy = { ...prev };
+      const arr = copy[day].ejercicios.slice();
+      const idx = arr.findIndex((e) => e.id === ejId);
+      if (idx === -1) return prev;
+      const swapWith = dir === "up" ? idx - 1 : idx + 1;
+      if (swapWith < 0 || swapWith >= arr.length) return prev;
+      const tmp = arr[swapWith];
+      arr[swapWith] = arr[idx];
+      arr[idx] = tmp;
+      copy[day] = { ...copy[day], ejercicios: arr };
+      return copy;
+    });
+  };
+  
+  // =======================
+  // Cuando se selecciona una sugerencia en el selector (aplica metadata automáticamente)
+  // =======================
+  const handleSelectSuggestion = (sug: Ejercicio) => {
+    if (!selectorOpen.open) return;
+    // Modo "add": agrega el ejercicio completo a la rutina del día seleccionado
+    if (selectorOpen.mode === "add") {
+      addExercise(selectedDay, { ...sug, id: undefined });
+      setSelectorOpen({ open: false });
+      return;
+    }
+
+    // Modo "replace": reemplaza metadata y nombre (alt) del ejercicio objetivo
+    if (selectorOpen.mode === "replace" && selectorOpen.targetId) {
+      updateExercise(selectedDay, selectorOpen.targetId, {
+        nombre: sug.nombre,
+        series: sug.series,
+        reps: sug.reps,
+        rpe: sug.rpe,
+        tempo: sug.tempo,
+        nota: sug.nota,
+        grupo: sug.grupo,
+      });
+      // actualizar nombre alternativo en logs para consistencia con lo mostrado
+      setAltName(selectorOpen.targetId, sug.nombre);
+      setSelectorOpen({ open: false });
+      return;
+    }
+
+    // Fallback: cerrar selector
+    setSelectorOpen({ open: false });
+  };
+  
+  // Reemplazar uso de rutinaConIds por rutinaState en todo el componente
 
   // Pre-cargar valores de última sesión del mismo día
   useEffect(() => {
@@ -567,7 +1036,7 @@ const RutinaGym: React.FC = () => {
     if (lastSession && Object.keys(logs).length === 0) {
       setLogs(lastSession.exercises as any);
     }
-  }, [selectedDay, isLoading]);
+  }, [selectedDay, isLoading, history]);
 
   const previousSession = useMemo(() => {
     return history
@@ -578,21 +1047,21 @@ const RutinaGym: React.FC = () => {
   const volumenSemanal = useMemo(() => {
     const acc = new Map<Grupo, { min: number; max: number }>();
     dias.forEach((d) => {
-      rutinaConIds[d].ejercicios.forEach((e) => {
+      rutinaState[d].ejercicios.forEach((e) => {
         const [minS, maxS] = seriesToRange(e.series);
         const cur = acc.get(e.grupo) || { min: 0, max: 0 };
         acc.set(e.grupo, { min: cur.min + minS, max: cur.max + maxS });
       });
     });
     return acc;
-  }, [rutinaConIds]);
+  }, [rutinaState]);
 
   const exportToCSV = () => {
     let csv =
       "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,RPE,TEMPO,NOTAS,GRUPO MUSCULAR\n";
 
     dias.forEach((dia) => {
-      const data = rutinaConIds[dia];
+      const data = rutinaState[dia];
       csv += `\n${data.nombre}\n`;
       data.ejercicios.forEach((ej) => {
         csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${
@@ -623,73 +1092,53 @@ const RutinaGym: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // NUEVA FUNCIÓN: Copiar día completo con todos los datos
-  const copiarDiaCompleto = async () => {
-    const lineas: string[] = [];
+  // Exportar historial como JSON (backup)
+  const exportHistorial = () => {
+    const dataStr = JSON.stringify({ history, current: { done, logs } }, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rutina-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    alert("✅ Backup descargado! Guárdalo en un lugar seguro.");
+  };
+
+  // Importar historial desde JSON
+  const importHistorial = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
     
-    // Header del día
-    lineas.push(`🏋️ ${day.nombre}`);
-    lineas.push(`📅 ${new Date().toLocaleDateString('es-AR')}`);
-    lineas.push("");
-    
-    // Ejercicios con todos los datos
-    day.ejercicios.forEach((ej, i) => {
-      const numero = i + 1;
-      const ejercicioNombre = displayName(ej);
-      const sets = filledSets(ej.id, ej.series);
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
       
-      lineas.push(`${numero}. ${ejercicioNombre}`);
-      lineas.push(`   Series: ${ej.series} | Reps objetivo: ${ej.reps} | RPE: ${ej.rpe}`);
-      if (ej.tempo) lineas.push(`   Tempo: ${ej.tempo}`);
-      if (ej.nota) lineas.push(`   💡 ${ej.nota}`);
-      
-      // Series cargadas
-      if (sets.length > 0) {
-        lineas.push(`   📊 Series realizadas:`);
-        sets.forEach((set, idx) => {
-          lineas.push(`      ${idx + 1}. ${set.peso} kg × ${set.reps} reps`);
-        });
-      } else {
-        lineas.push(`   📊 Series: ________`);
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        if (data.history) {
+          setHistory(data.history);
+          await saveToDB(STORAGE_HISTORY, data.history);
+        }
+        if (data.current) {
+          setDone(data.current.done || {});
+          setLogs(data.current.logs || {});
+          await saveToDB(STORAGE_CURRENT, data.current);
+        }
+        
+        alert("✅ Historial restaurado exitosamente!");
+      } catch (error) {
+        alert("❌ Error al importar el archivo. Asegurate que sea un backup válido.");
+        console.error(error);
       }
-      
-      lineas.push(`   ✅ Completado: ${isDone(ej.id) ? 'SÍ' : 'NO'}`);
-      lineas.push("");
-    });
-
-    // Stats del día
-    const completedCount = day.ejercicios.reduce((acc, e) => acc + (isDone(e.id) ? 1 : 0), 0);
-    lineas.push(`📈 Resumen del día:`);
-    lineas.push(`   Ejercicios completados: ${completedCount}/${day.ejercicios.length}`);
-    lineas.push(`   Volumen total: ${currentVolume} kg`);
-    lineas.push("");
+    };
     
-    // Notas generales
-    lineas.push("📝 Notas del entrenamiento:");
-    lineas.push("____________________________");
-    lineas.push("");
-    lineas.push("💧 Hidratación: _______");
-    lineas.push("💤 Descanso entre series: _______");
-    lineas.push("🎯 Técnica: _______");
-    lineas.push("");
-    lineas.push("✨ Puntos a mejorar:");
-    lineas.push("____________________________");
-    
-    const texto = lineas.join("\n");
-
-    try {
-      await navigator.clipboard.writeText(texto);
-      alert("✅ ¡Día completo copiado al portapapeles!\n\nPegalo en Notas de iOS para tener tu backup.");
-    } catch {
-      // Fallback para navegadores que no soportan clipboard
-      const textarea = document.createElement("textarea");
-      textarea.value = texto;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-      alert("✅ ¡Día completo copiado!\n\nPegalo en Notas de iOS.");
-    }
+    input.click();
   };
 
   const handlePrint = () => window.print();
@@ -733,7 +1182,7 @@ const RutinaGym: React.FC = () => {
     }
   };
 
-  const day = rutinaConIds[selectedDay];
+  const day = rutinaState[selectedDay];
 
   const keyFor = (id?: string) => `${selectedDay}:${id ?? ""}`;
   const isDone = (id?: string) => !!done[keyFor(id)];
@@ -949,13 +1398,19 @@ const RutinaGym: React.FC = () => {
                 >
                   📊 ({history.length})
                 </button>
-                {/* REEMPLAZADO: Botón de backup por copiar día completo */}
                 <button
-                  onClick={copiarDiaCompleto}
-                  className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
-                  title="Copiar día completo al portapapeles"
+                  onClick={exportHistorial}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
+                  title="Backup"
                 >
-                  📋 Copiar día
+                  💾
+                </button>
+                <button
+                  onClick={importHistorial}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
+                  title="Restaurar"
+                >
+                  📂
                 </button>
               </div>
             </div>
@@ -1073,7 +1528,7 @@ const RutinaGym: React.FC = () => {
 
                       <div className="grid gap-2 text-sm">
                         {Object.entries(session.exercises).map(([exId, exData]) => {
-                          const originalEx = rutinaConIds[session.day].ejercicios.find(
+                          const originalEx = rutinaState[session.day].ejercicios.find(
                             (e) => e.id === exId
                           );
                           if (!originalEx) return null;
@@ -1145,6 +1600,13 @@ const RutinaGym: React.FC = () => {
                 >
                   Reset
                 </button>
+                {/* ✅ Nuevo: agregar ejercicio (abre selector en modo add, por grupo opcional) */}
+                <button
+                  onClick={() => setSelectorOpen({ open: true, mode: "add", grupo: undefined })}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
+                >
+                  + Agregar ejercicio
+                </button>
               </div>
             </div>
           </div>
@@ -1197,14 +1659,41 @@ const RutinaGym: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              const actual = displayName(ej);
-                              const nuevo = window.prompt("Reemplazar:", actual);
-                              if (nuevo !== null) setAltName(ej.id, nuevo);
+                              // abrir selector inteligente en modo replace
+                              setSelectorOpen({ open: true, targetId: ej.id, grupo: ej.grupo, mode: "replace" });
                             }}
                             className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70 w-fit"
                           >
                             Reemplazar
                           </button>
+
+                          {/* Nuevo: controles de reordenar y eliminar */}
+                          <div className="flex gap-1 mt-1">
+                            <button
+                              onClick={() => moveExercise(selectedDay, ej.id!, "up")}
+                              className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
+                              title="Mover arriba"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              onClick={() => moveExercise(selectedDay, ej.id!, "down")}
+                              className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
+                              title="Mover abajo"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (!confirm("Eliminar ejercicio de la rutina?")) return;
+                                removeExercise(selectedDay, ej.id!);
+                              }}
+                              className="text-[10px] px-1 rounded border border-red-400 hover:bg-red-600 text-red-700 bg-white/70"
+                              title="Eliminar ejercicio"
+                            >
+                              🗑
+                            </button>
+                          </div>
                         </div>
                       </td>
 
@@ -1346,6 +1835,81 @@ const RutinaGym: React.FC = () => {
         </div>
       </div>
 
+      {/* Selector Inteligente - búsqueda/autocompletado de ejercicios */}
+      {selectorOpen.open && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+        >
+          <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-4 border border-slate-700">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-white font-bold text-sm">🔎 Seleccionar ejercicio</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectorOpen({ open: false })}
+                  className="text-slate-300 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <input
+                ref={searchInputRef}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre o grupo (ej: press, espalda)..."
+                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
+              />
+              <div className="text-xs text-slate-400 mt-1">
+                Mostrando sugerencias de la base. Seleccioná para reemplazar el nombre.
+              </div>
+            </div>
+
+            <div className="grid gap-2 max-h-64 overflow-y-auto">
+              {suggestions.length === 0 ? (
+                <div className="text-slate-400 text-sm">No se encontraron ejercicios.</div>
+              ) : (
+                suggestions.map((sug) => (
+                  <button
+                    key={sug.id}
+                    onClick={() => {
+                      handleSelectSuggestion(sug);
+                    }}
+                    className="text-left p-2 rounded hover:bg-slate-700 flex justify-between items-center border border-slate-600 bg-slate-700"
+                  >
+                    <div>
+                      <div className="font-semibold text-white text-sm">{sug.nombre}</div>
+                      <div className="text-xs text-slate-300">{sug.tempo ? `${sug.tempo} · ` : ""}{sug.reps} · RPE {sug.rpe}</div>
+                    </div>
+                    <div className="text-xs text-slate-400 capitalize">{sug.grupo}</div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="mt-3 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  if (selectorOpen.targetId) setAltName(selectorOpen.targetId, undefined); // restaurar original
+                  setSelectorOpen({ open: false });
+                }}
+                className="px-3 py-1 rounded bg-slate-600 text-white text-sm"
+              >
+                Usar nombre original
+              </button>
+              <button
+                onClick={() => setSelectorOpen({ open: false })}
+                className="px-3 py-1 rounded bg-indigo-600 text-white text-sm"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <style>{`
         @media print {
           * { box-shadow: none !important; }
@@ -1357,3 +1921,5 @@ const RutinaGym: React.FC = () => {
 };
 
 export default RutinaGym;
+
+// Versión VSCode
