@@ -1215,6 +1215,35 @@ const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTime) / 6000
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   };
+// --- TSV para pegar directo en Google Sheets (modo compacto) ---
+const sanitizeTSV = (v: any): string =>
+  (v ?? "").toString().replace(/\t/g, " ").replace(/\r?\n/g, " / ").trim();
+
+const generarTablaParaSheets = (): string => {
+  const fechaStr = new Date().toISOString().split("T")[0];
+  // Encabezado
+  let tsv = "Fecha\tDía\tEjercicio\tRepeticiones\tRIR\tPeso_Corporal\tNotas\n";
+
+  // Fila del día (resumen de cabecera)
+  tsv += `${fechaStr}\t${sanitizeTSV(day.nombre)}\t-\t-\t${bodyWeight || ""}\t\n`;
+
+  // Filas de ejercicios (una por ejercicio, sets agregados con coma)
+  day.ejercicios.forEach((ej) => {
+    const k = keyFor(ej.id);
+    const entry = logs[k];
+    const sets = (entry?.sets ?? []).filter(isFilled);
+
+    const reps = sets.map((s) => sanitizeTSV(s.reps)).join(",");
+    const rirs = sets.map((s) => sanitizeTSV(s.rir)).join(",");
+    // preferí la nota “live” por ejercicio si existe
+    const nota = sanitizeTSV(getExerciseNote(ej.id) || entry?.notes || "");
+
+    // usar displayName para respetar nombres alternativos
+    tsv += `\t${sanitizeTSV(displayName(ej))}\t${reps}\t${rirs}\t\t${nota}\n`;
+  });
+
+  return tsv;
+};
 
   // Copiar día completo (resumen legible para compartir)
   const copiarDiaCompleto = async () => {
@@ -1543,6 +1572,29 @@ const getSets = (id: string | undefined, _series: Series) => {
                 >
                   📋 Copiar día
                 </button>
+                <button
+  onClick={async () => {
+    const tabla = generarTablaParaSheets();
+    try {
+      await navigator.clipboard.writeText(tabla);
+      alert("✅ Tabla copiada — pegá en Google Sheets (Ctrl/Cmd+V)");
+    } catch {
+      // Fallback iOS / permisos
+      const ta = document.createElement("textarea");
+      ta.value = tabla;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      alert("✅ Tabla copiada (fallback) — pegá en Google Sheets");
+    }
+  }}
+  className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
+  title="Copiar tabla TSV para Sheets"
+>
+  📑 Exportar Tabla
+</button>
+
               </div>
             </div>
 
