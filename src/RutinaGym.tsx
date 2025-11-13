@@ -867,6 +867,11 @@ const RutinaGym: React.FC = () => {
     currentReps?: string;
   }>({ open: false });
 
+  // =======================
+  // NUEVO: Estado para controlar expansión (MEJORA 2)
+  // =======================
+  const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
+
   const openOneRMFor = (exerciseId?: string) => {
     // usar último set completado o primer set por defecto
     const k = `${selectedDay}:${exerciseId ?? ""}`;
@@ -1630,14 +1635,14 @@ const RutinaGym: React.FC = () => {
   // Mostrar loading mientras carga desde IndexedDB
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center safe-area-top safe-area-bottom">
         <div className="text-white text-xl">Cargando datos... 💪</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0 safe-area-top safe-area-bottom">
       <div className="max-w-7xl mx-auto">
         {/* Header compacto */}
         <div className="bg-slate-800 rounded-lg shadow-xl p-2 md:p-4 mb-2 border border-slate-700 print:shadow-none print:border-0 print:bg-white">
@@ -1874,7 +1879,7 @@ const RutinaGym: React.FC = () => {
 
         {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
         {showHistory && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 safe-area-top safe-area-bottom">
             <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6 border border-slate-700">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-white">
@@ -1976,217 +1981,166 @@ const RutinaGym: React.FC = () => {
           </div>
         )}
 
-        {/* Tabla de ejercicios - COMPACTA */}
-        <div className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700 print:border-0 print:shadow-none print:bg-white mb-2">
-          <div className="bg-slate-700 p-2 border-b border-slate-600 print:bg-white print:border-b">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-sm md:text-base font-bold text-white print:text-slate-900">
-                {day.nombre}
-              </h2>
-              <div className="flex items-center gap-1 print:hidden text-xs">
-                <span className="bg-emerald-700 text-white px-2 py-0.5 rounded font-semibold">
-                  {currentVolume} kg
-                </span>
-                <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded">
-                  {completedCount}/{day.ejercicios.length}
-                </span>
-                <button
-                  onClick={finalizarSesion}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded font-semibold"
-                >
-                  ✓ Fin
-                </button>
-                <button
-                  onClick={resetDay}
-                  className="bg-slate-600 hover:bg-slate-500 text-white px-2 py-0.5 rounded"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={() =>
-                    setSelectorOpen({
-                      open: true,
-                      mode: "add",
-                      grupo: undefined,
-                    })
-                  }
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
-                >
-                  + Agregar ejercicio
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* MEJORA 2: Contenedor de ejercicios - CARDS en lugar de tabla */}
+        <div className="space-y-3 mb-24">
+          {" "}
+          {/* Margen bottom para la barra fija */}
+          {day.ejercicios.map((ej, idx) => {
+            const colors = colorLegend[ej.grupo];
+            const checked = isDone(ej.id);
+            const isExpanded = expandedExercise === ej.id;
+            const sets = getSets(ej.id, ej.series);
+            const filledCount = filledSets(ej.id, ej.series).length;
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs" role="table">
-              <thead className="bg-slate-700 print:bg-slate-100">
-                <tr>
-                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">
-                    ✓
-                  </th>
-                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800 sticky left-0 bg-slate-700 z-10">
-                    Ejercicio
-                  </th>
-                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">
-                    S
-                  </th>
-                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">
-                    Reps
-                  </th>
-                  <th className="px-2 py-2 text-left text-slate-300 print:text-slate-800">
-                    reps × kg × RIR
-                  </th>
-                  <th className="px-2 py-2 text-center text-slate-300 print:text-slate-800">
-                    RPE
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {day.ejercicios.map((ej, idx) => {
-                  const colors = colorLegend[ej.grupo];
-                  const checked = isDone(ej.id);
-                  return (
-                    <tr
-                      key={ej.id}
-                      className={`${colors.bg} border-b ${colors.border}`}
-                    >
-                      <td className="px-2 py-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleDone(ej.id)}
-                          className="w-4 h-4"
-                        />
-                      </td>
+            return (
+              <div
+                key={ej.id}
+                className={`rounded-xl border-l-4 ${colors.border} ${
+                  colors.bg
+                } transition-all duration-200 ${
+                  isExpanded ? "ring-2 ring-white/20" : ""
+                }`}
+              >
+                {/* HEADER DE LA CARD - Siempre visible */}
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    {/* Checkbox y info principal */}
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDone(ej.id)}
+                        className="w-5 h-5 mt-0.5 flex-shrink-0"
+                      />
 
-                      <td
-                        className={`px-2 py-2 font-semibold ${colors.text} sticky left-0 ${colors.bg} z-10`}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono text-[10px] text-slate-600">
-                              E{idx + 1}
-                            </span>
-                            <span className="text-[11px] leading-tight">
-                              {displayName(ej)}
-                            </span>
-                          </div>
-                          {previousSession?.exercises[ej.id!] && (
-                            <div className="text-[10px] text-slate-500">
-                              ←{" "}
-                              {previousSession.exercises[ej.id!].sets
-                                .map((s) => `${s.peso}×${s.reps}`)
-                                .join(" ")}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectorOpen({
-                                open: true,
-                                targetId: ej.id,
-                                grupo: ej.grupo,
-                                mode: "replace",
-                              });
-                            }}
-                            className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 text-slate-700 bg-white/70 w-fit"
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-mono text-slate-600 bg-white/50 px-1.5 py-0.5 rounded">
+                            E{idx + 1}
+                          </span>
+                          <span
+                            className={`font-semibold text-sm leading-tight ${colors.text} break-words`}
                           >
-                            Reemplazar
-                          </button>
-
-                          <div className="flex gap-1 mt-1">
-                            <button
-                              onClick={() =>
-                                moveExercise(selectedDay, ej.id!, "up")
-                              }
-                              className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
-                              title="Mover arriba"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              onClick={() =>
-                                moveExercise(selectedDay, ej.id!, "down")
-                              }
-                              className="text-[10px] px-1 rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
-                              title="Mover abajo"
-                            >
-                              ↓
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (
-                                  !confirm("Eliminar ejercicio de la rutina?")
-                                )
-                                  return;
-                                removeExercise(selectedDay, ej.id!);
-                              }}
-                              className="text-[10px] px-1 rounded border border-red-400 hover:bg-red-600 text-red-700 bg-white/70"
-                              title="Eliminar ejercicio"
-                            >
-                              🗑
-                            </button>
-                          </div>
+                            {displayName(ej)}
+                          </span>
                         </div>
-                      </td>
 
-                      <td className="px-2 py-2 text-center font-bold text-slate-700 text-[11px]">
-                        {ej.series}
-                      </td>
-                      <td className="px-2 py-2 text-center font-mono text-slate-700 text-[10px]">
-                        {ej.reps}
-                      </td>
+                        {/* Metadata compacta */}
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-700">
+                          <span className="font-bold">{ej.series}s</span>
+                          <span className="font-mono">{ej.reps}r</span>
+                          <span>RPE {ej.rpe}</span>
+                          {filledCount > 0 && (
+                            <span className="bg-white/50 px-1.5 py-0.5 rounded font-semibold">
+                              {filledCount}✅
+                            </span>
+                          )}
+                        </div>
 
-                      <td className="px-2 py-2">
-                        <div className="flex flex-col gap-1">
-                          {getSets(ej.id, ej.series).map((s, sidx) => {
-                            const [rirMin, rirMax] = parseRIR(s.rir);
-                            return (
-                              <div
-                                key={sidx}
-                                className="flex items-center gap-0.5 flex-wrap"
-                              >
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  placeholder="r"
-                                  value={s.reps ?? ""}
-                                  onChange={(e) =>
-                                    setSetValue(
-                                      ej.id,
-                                      sidx,
-                                      "reps",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                                />
+                        {/* Preview última sesión */}
+                        {previousSession?.exercises[ej.id!] && (
+                          <div className="text-[10px] text-slate-500 mt-1">
+                            ← Prev:{" "}
+                            {previousSession.exercises[ej.id!].sets
+                              .slice(0, 2) // Solo mostrar primeros 2 sets para preview
+                              .map((s) => `${s.peso}×${s.reps}`)
+                              .join(" ")}
+                            {previousSession.exercises[ej.id!].sets.length >
+                              2 && "..."}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                                <span className="text-slate-600 text-xs">
-                                  ×
-                                </span>
+                    {/* Botón expandir/contraer */}
+                    <button
+                      onClick={() =>
+                        setExpandedExercise(isExpanded ? null : ej.id!)
+                      }
+                      className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 transition-transform ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                    >
+                      <span className="text-slate-700">⬇️</span>
+                    </button>
+                  </div>
+                </div>
 
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  placeholder="kg"
-                                  value={s.peso ?? ""}
-                                  onChange={(e) =>
-                                    setSetValue(
-                                      ej.id,
-                                      sidx,
-                                      "peso",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-12 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                                />
+                {/* CONTENIDO EXPANDIDO */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 border-t border-white/20 pt-4 space-y-4">
+                    {/* Controles de series - MANTENIENDO MISMA FUNCIONALIDAD */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-slate-700 text-sm">
+                          Series realizadas:
+                        </h4>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => addSet(ej.id)}
+                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                          >
+                            + Serie
+                          </button>
+                          <button
+                            onClick={() => duplicateLastSet(ej.id)}
+                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                          >
+                            Duplicar
+                          </button>
+                        </div>
+                      </div>
 
-                                <span className="text-slate-600 text-xs">
-                                  ×
-                                </span>
+                      {/* Lista de series - INPUTS MÁS GRANDES */}
+                      <div className="space-y-2">
+                        {sets.map((s, sidx) => {
+                          const [rirMin, rirMax] = parseRIR(s.rir);
+                          return (
+                            <div
+                              key={sidx}
+                              className="flex items-center gap-2 bg-white/50 rounded-lg p-2"
+                            >
+                              <span className="text-xs font-semibold text-slate-700 w-6">
+                                {sidx + 1}.
+                              </span>
 
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder="Reps"
+                                value={s.reps ?? ""}
+                                onChange={(e) =>
+                                  setSetValue(
+                                    ej.id,
+                                    sidx,
+                                    "reps",
+                                    e.target.value
+                                  )
+                                }
+                                className="flex-1 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                              />
+
+                              <span className="text-slate-600 text-sm">×</span>
+
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="Kg"
+                                value={s.peso ?? ""}
+                                onChange={(e) =>
+                                  setSetValue(
+                                    ej.id,
+                                    sidx,
+                                    "peso",
+                                    e.target.value
+                                  )
+                                }
+                                className="flex-1 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                              />
+
+                              <span className="text-slate-600 text-sm">×</span>
+
+                              <div className="flex items-center gap-1">
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -2200,14 +2154,11 @@ const RutinaGym: React.FC = () => {
                                       e.target.value
                                     )
                                   }
-                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                                  title="RIR Mínimo (requerido)"
+                                  className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
-
                                 <span className="text-slate-600 text-xs">
-                                  −
+                                  -
                                 </span>
-
                                 <input
                                   type="number"
                                   inputMode="numeric"
@@ -2221,78 +2172,96 @@ const RutinaGym: React.FC = () => {
                                       e.target.value
                                     )
                                   }
-                                  className="w-10 text-center px-1 py-0.5 text-xs rounded border border-slate-400 bg-white/70"
-                                  title="RIR Máximo (opcional)"
+                                  className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
-
-                                <button
-                                  type="button"
-                                  onClick={() => removeSet(ej.id, sidx)}
-                                  className="px-1 text-xs rounded border border-slate-400 hover:bg-slate-200"
-                                >
-                                  −
-                                </button>
                               </div>
-                            );
-                          })}
 
-                          <div className="flex gap-0.5 mt-1 flex-wrap">
-                            <button
-                              onClick={() => addSet(ej.id)}
-                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
-                            >
-                              ➕ Agregar serie
-                            </button>
-                            <button
-                              onClick={() => duplicateLastSet(ej.id)}
-                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
-                            >
-                              📝 Duplicar última
-                            </button>
-                            <button
-                              onClick={() => clearEmptySets(ej.id, ej.series)}
-                              className="px-1 text-[10px] rounded border border-slate-400 hover:bg-slate-200"
-                            >
-                              🗑️ Limpiar vacías
-                            </button>
-                            <button
-                              onClick={() => openOneRMFor(ej.id)}
-                              className="px-2 text-[11px] rounded border border-slate-400 hover:bg-slate-200 bg-white/70"
-                              title="Calcular 1RM (Epley)"
-                            >
-                              🧮 1RM
-                            </button>
-                          </div>
+                              <button
+                                onClick={() => removeSet(ej.id, sidx)}
+                                className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center flex-shrink-0"
+                              >
+                                −
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
 
-                          {/* NUEVO: Textarea de notas por ejercicio - ACTUALIZADO */}
-                          <div className="mt-2 print:hidden">
-                            <textarea
-                              value={getExerciseNote(ej.id)}
-                              onChange={(e) =>
-                                setExerciseNote(ej.id, e.target.value)
-                              }
-                              placeholder="📝 Notas..."
-                              rows={2}
-                              className="w-full px-2 py-1 text-xs rounded border border-slate-400 bg-white/70 text-slate-800 resize-none"
-                            />
-                            {getExerciseNote(ej.id) && (
-                              <div className="text-xs text-slate-500 mt-0.5">
-                                ✓ Guardada en logs
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
+                      {/* Botones de acción */}
+                      <div className="flex flex-wrap gap-2 justify-center pt-2">
+                        <button
+                          onClick={() => clearEmptySets(ej.id, ej.series)}
+                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
+                        >
+                          🗑️ Limpiar vacías
+                        </button>
+                        <button
+                          onClick={() => openOneRMFor(ej.id)}
+                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
+                        >
+                          🧮 Calcular 1RM
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectorOpen({
+                              open: true,
+                              targetId: ej.id,
+                              grupo: ej.grupo,
+                              mode: "replace",
+                            });
+                          }}
+                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
+                        >
+                          🔄 Reemplazar
+                        </button>
+                      </div>
+                    </div>
 
-                      <td className="px-2 py-2 text-center font-bold text-slate-700 text-[11px]">
-                        {ej.rpe}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    {/* Notas del ejercicio - MANTENIENDO FUNCIONALIDAD */}
+                    <div className="pt-2 border-t border-white/20">
+                      <textarea
+                        value={getExerciseNote(ej.id)}
+                        onChange={(e) => setExerciseNote(ej.id, e.target.value)}
+                        placeholder="📝 Notas del ejercicio..."
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-400 bg-white/80 text-slate-800 resize-none"
+                      />
+                    </div>
+
+                    {/* Controles de movimiento/eliminación */}
+                    <div className="flex gap-2 justify-center pt-2">
+                      <button
+                        onClick={() => moveExercise(selectedDay, ej.id!, "up")}
+                        className="px-3 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                        disabled={idx === 0}
+                      >
+                        ↑ Subir
+                      </button>
+                      <button
+                        onClick={() =>
+                          moveExercise(selectedDay, ej.id!, "down")
+                        }
+                        className="px-3 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                        disabled={idx === day.ejercicios.length - 1}
+                      >
+                        ↓ Bajar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!confirm("¿Eliminar ejercicio de la rutina?"))
+                            return;
+                          removeExercise(selectedDay, ej.id!);
+                        }}
+                        className="px-3 py-1 text-xs bg-red-500 text-white rounded"
+                      >
+                        🗑 Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Abdominales - compacto */}
@@ -2366,12 +2335,46 @@ const RutinaGym: React.FC = () => {
         <div className="text-center text-slate-400 text-[10px] mt-3 print:text-slate-700">
           <p>83kg | 1.75m | 23 años | Hipertrofia + Estética</p>
         </div>
+
+        {/* Barra fija inferior para acciones principales */}
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 p-3 print:hidden safe-area-bottom">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-sm font-semibold">
+                {completedCount}/{day.ejercicios.length}
+              </span>
+              <span className="bg-emerald-700 text-white px-2 py-1 rounded text-sm font-semibold">
+                {currentVolume} kg
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() =>
+                  setSelectorOpen({
+                    open: true,
+                    mode: "add",
+                    grupo: undefined,
+                  })
+                }
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-semibold"
+              >
+                + Ejercicio
+              </button>
+              <button
+                onClick={finalizarSesion}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-semibold"
+              >
+                ✓ Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Selector Inteligente - búsqueda/autocompletado de ejercicios */}
       {selectorOpen.open && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 safe-area-top safe-area-bottom"
           style={{ zIndex: 9999 }}
         >
           <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-4 border border-slate-700">
@@ -2459,7 +2462,7 @@ const RutinaGym: React.FC = () => {
       {/* Modal 1RM (Epley) */}
       {oneRMModal.open && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 safe-area-top safe-area-bottom"
           style={{ zIndex: 10000 }}
         >
           <div className="w-full max-w-md bg-slate-800 rounded-xl p-4 border border-slate-700">
@@ -2576,6 +2579,22 @@ const RutinaGym: React.FC = () => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   
+  /* MEJORA 3: Safe areas para iOS */
+  .safe-area-top {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .safe-area-bottom {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  /* Mejorar scroll en móvil */
+  @media (max-width: 768px) {
+    .overflow-x-auto {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
   @supports (padding-top: env(safe-area-inset-top)) {
     :root { --safe-top: env(safe-area-inset-top); }
   }
@@ -2611,5 +2630,3 @@ const computeEpley = (weightStr?: string, repsStr?: string) => {
 };
 
 export default RutinaGym;
-
-// Versión VSCode
