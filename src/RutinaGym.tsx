@@ -802,6 +802,56 @@ const STORAGE_CURRENT = "rg-current-v2" as const;
 // ✅ Nuevo: persistir cambios en la rutina editable
 const STORAGE_RUTINA = "rg-rutina-v1" as const;
 
+// Hook para navegación entre inputs
+const useInputNavigation = () => {
+  const createInputProps = (
+    exerciseId: string,
+    setIndex: number,
+    inputType: "reps" | "peso" | "rirMin" | "rirMax"
+  ) => {
+    const getNextInput = (): string | null => {
+      switch (inputType) {
+        case "reps":
+          return `${exerciseId}-${setIndex}-peso`;
+        case "peso":
+          return `${exerciseId}-${setIndex}-rirMin`;
+        case "rirMin":
+          return `${exerciseId}-${setIndex}-rirMax`;
+        case "rirMax":
+          const sets = getSets(exerciseId, 3);
+          if (setIndex < sets.length - 1) {
+            return `${exerciseId}-${setIndex + 1}-reps`;
+          } else {
+            setTimeout(() => addSet(exerciseId), 50);
+            return `${exerciseId}-${setIndex + 1}-reps`;
+          }
+        default:
+          return null;
+      }
+    };
+
+    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const nextInputId = getNextInput();
+        if (nextInputId) {
+          setTimeout(() => {
+            const nextInput = document.getElementById(nextInputId);
+            nextInput?.focus();
+          }, 10);
+        }
+      }
+    };
+
+    return {
+      id: `${exerciseId}-${setIndex}-${inputType}`,
+      onKeyDown,
+    };
+  };
+
+  return { createInputProps };
+};
+
 const RutinaGym: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
@@ -873,6 +923,9 @@ const RutinaGym: React.FC = () => {
   // NUEVO: Estado para controlar expansión (MEJORA 2)
   // =======================
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
+
+  // Hook para navegación entre inputs
+  const { createInputProps } = useInputNavigation();
 
   const openOneRMFor = (exerciseId?: string) => {
     // usar último set completado o primer set por defecto
@@ -1706,11 +1759,27 @@ const RutinaGym: React.FC = () => {
                 <span className="text-white text-lg">←</span>
               </button>
 
+              {/* MEJORA 1: Título modificado */}
               <div className="flex-1 text-center mx-2">
-                <h1 className="text-white font-bold text-sm truncate">
-                  {day.nombre.split(" - ")[1] || day.nombre}
+                {/* Título principal: DÍA DE LA SEMANA */}
+                <h1 className="text-white font-bold text-lg capitalize">
+                  {selectedDay}
                 </h1>
-                <div className="flex justify-center items-center gap-1 mt-1">
+
+                {/* Subtítulo: Grupos musculares */}
+                <div className="text-slate-300 text-sm mt-1">
+                  {day.nombre.split(" - ")[1] ||
+                    day.nombre.replace(
+                      `${
+                        selectedDay.charAt(0).toUpperCase() +
+                        selectedDay.slice(1)
+                      } - `,
+                      ""
+                    )}
+                </div>
+
+                {/* Indicadores de días (mantener) */}
+                <div className="flex justify-center items-center gap-1 mt-2">
                   {dias.map((dia) => (
                     <div
                       key={dia}
@@ -2019,8 +2088,11 @@ const RutinaGym: React.FC = () => {
                                 {sidx + 1}.
                               </span>
 
+                              {/* MEJORA 3: Inputs con navegación por Enter */}
                               <input
+                                {...createInputProps(ej.id!, sidx, "reps")}
                                 type="number"
+                                inputMode="numeric"
                                 placeholder="Reps"
                                 value={s.reps ?? ""}
                                 onChange={(e) =>
@@ -2035,7 +2107,9 @@ const RutinaGym: React.FC = () => {
                               />
 
                               <input
+                                {...createInputProps(ej.id!, sidx, "peso")}
                                 type="number"
+                                inputMode="decimal"
                                 placeholder="Kg"
                                 value={s.peso ?? ""}
                                 onChange={(e) =>
@@ -2051,7 +2125,9 @@ const RutinaGym: React.FC = () => {
 
                               <div className="flex items-center gap-1">
                                 <input
+                                  {...createInputProps(ej.id!, sidx, "rirMin")}
                                   type="number"
+                                  inputMode="numeric"
                                   placeholder="RIR"
                                   value={rirMin ?? ""}
                                   onChange={(e) =>
@@ -2068,7 +2144,9 @@ const RutinaGym: React.FC = () => {
                                   -
                                 </span>
                                 <input
+                                  {...createInputProps(ej.id!, sidx, "rirMax")}
                                   type="number"
+                                  inputMode="numeric"
                                   placeholder="RIR"
                                   value={rirMax ?? ""}
                                   onChange={(e) =>

@@ -1,0 +1,8 @@
+{
+    "short_name": "RutinaGym",
+    "name": "Rutina Gym App",
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#0f172a",
+    "background_color": "#0f172a"
+  }
