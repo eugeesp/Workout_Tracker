@@ -1,6 +1,7 @@
 {
-  "short_name": "RutinaGym",
-  "name": "Rutina Gym App",
+  "short_name": "Rutina Eugenio",
+  "name": "💪 Rutina de Eugenio - App de Gym",
+  "description": "App personal de Eugenio para registro de entrenamientos y seguimiento de progreso",
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#0f172a",
@@ -18,5 +19,6 @@
     }
   ],
   "scope": "/",
-  "orientation": "portrait"
+  "orientation": "portrait",
+  "categories": ["health", "fitness", "lifestyle"]
 }

@@ -1,11 +1,36 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + Tailwind + TS</title>
-    <!-- PWA Meta Tags -->
+
+    <!-- Título y descripción mejorados -->
+    <title>💪 Rutina de Eugenio - Seguimiento de Entrenamiento</title>
+    <meta
+      name="description"
+      content="App personal de Eugenio para registrar entrenamientos, series, reps y progreso en el gimnasio. Ideal para hipertrofia y seguimiento de rutinas."
+    />
+
+    <!-- Open Graph para WhatsApp/Facebook -->
+    <meta property="og:title" content="💪 Rutina de Eugenio - App de Gym" />
+    <meta
+      property="og:description"
+      content="Registro personal de entrenamientos, series y progreso deportivo."
+    />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta property="og:url" content="https://y2lj5y-5173.csb.app/" />
+    <meta property="og:type" content="website" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="💪 Rutina de Eugenio" />
+    <meta
+      name="twitter:description"
+      content="App personal para registrar entrenamientos y progreso en el gym."
+    />
+    <meta name="twitter:image" content="/icon-512.png" />
+
+    <!-- PWA Meta Tags (mantener igual) -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,13 +46,9 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Service Worker (solo una vez, eliminar el duplicado) -->
     <script>
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/sw.js");
-      }
-    </script>
-    <script>
-      // Registrar Service Worker
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
           navigator.serviceWorker
