@@ -1752,18 +1752,23 @@ const RutinaGym: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-1">
-                <div className="relative group">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={bodyWeight}
-                    onChange={(e) => setBodyWeight(e.target.value)}
-                    placeholder="⚖️"
-                    className="w-12 h-8 text-center bg-slate-800 border border-slate-600 rounded text-white text-xs font-semibold placeholder-slate-400"
-                  />
-                  {bodyWeight && (
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
-                  )}
+                <div className="relative">
+                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-slate-600">
+                    <span className="text-white font-semibold text-sm">
+                      Peso
+                    </span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={bodyWeight}
+                      onChange={(e) => setBodyWeight(e.target.value)}
+                      placeholder="kg"
+                      className="w-16 text-center bg-slate-700 text-white font-bold border-0 rounded text-sm py-1"
+                    />
+                    {bodyWeight && (
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    )}
+                  </div>
                 </div>
 
                 <button
@@ -1780,13 +1785,6 @@ const RutinaGym: React.FC = () => {
           {isSwiping && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
           )}
-        </div>
-
-        {/* Mensaje educativo */}
-        <div className="bg-blue-900/50 border border-blue-700 rounded-lg mx-4 mt-2 p-2 text-center">
-          <p className="text-blue-200 text-xs">
-            💡 Desliza izquierda/derecha para cambiar de día
-          </p>
         </div>
 
         {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
@@ -1903,7 +1901,7 @@ const RutinaGym: React.FC = () => {
         )}
 
         {/* MEJORA 2: Contenedor de ejercicios - CARDS en lugar de tabla */}
-        <div className="space-y-3 mb-24">
+        <div className="space-y-3 px-2 mt-3 mb-16">
           {" "}
           {/* Margen bottom para la barra fija */}
           {day.ejercicios.map((ej, idx) => {
@@ -2172,7 +2170,7 @@ const RutinaGym: React.FC = () => {
         </div>
 
         {/* Abdominales - compacto */}
-        <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:bg-white">
+        <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:bg-white mx-2">
           <h3 className="text-sm font-bold text-white mb-2 print:text-slate-900">
             🔥 Abdominales (opcional)
           </h3>
@@ -2194,7 +2192,7 @@ const RutinaGym: React.FC = () => {
         </div>
 
         {/* Notas técnicas - colapsable */}
-        <details className="bg-slate-800 rounded-lg p-3 border border-slate-700 print:bg-white">
+        <details className="bg-slate-800 rounded-lg p-3 border border-slate-700 print:bg-white mx-2">
           <summary className="text-sm font-bold text-white cursor-pointer print:text-slate-900">
             📋 Notas Técnicas (click para expandir)
           </summary>
@@ -2239,53 +2237,41 @@ const RutinaGym: React.FC = () => {
         </details>
 
         {/* Footer compacto */}
-        <div className="text-center text-slate-400 text-[10px] mt-3 print:text-slate-700">
+        <div className="text-center text-slate-400 text-[10px] mt-3 print:text-slate-700 px-2">
           <p>83kg | 1.75m | 23 años | Hipertrofia + Estética</p>
         </div>
 
-        {/* Barra inferior fija - Acciones principales */}
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-700 safe-area-bottom z-40">
-          <div className="p-3">
-            {/* Fila 1: Acciones principales */}
-            <div className="flex items-center justify-between gap-2 mb-2">
-              {/* Botón FIN - Prioridad máxima */}
+        {/* Barra inferior discreta - Solo aparece cuando se necesita */}
+        <div
+          className={`fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-700 safe-area-bottom z-40 transition-all duration-300 translate-y-0`}
+        >
+          <div className="p-2">
+            <div className="flex items-center justify-between gap-1">
+              {/* Acción principal: FINALIZAR */}
               <button
                 onClick={finalizarSesion}
-                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold text-xs transition-all active:scale-95"
               >
-                <span className="text-lg">✓</span>
-                FINALIZAR
+                ✓ FINALIZAR
               </button>
 
-              {/* Botón AGREGAR EJERCICIO */}
+              {/* Acciones secundarias compactas */}
               <button
                 onClick={() =>
                   setSelectorOpen({ open: true, mode: "add", grupo: undefined })
                 }
-                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className="w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all"
+                title="Agregar ejercicio"
               >
-                <span className="text-lg">+</span>
-                AGREGAR
+                +
               </button>
 
-              {/* Botón RESET - Secundario */}
-              <button
-                onClick={resetDay}
-                className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm active:scale-95 transition-all"
-                title="Reiniciar día"
-              >
-                🔄
-              </button>
-            </div>
-
-            {/* Fila 2: Acciones secundarias */}
-            <div className="flex items-center justify-center gap-3">
               <button
                 onClick={copiarDiaCompleto}
-                className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-all"
+                className="w-10 h-10 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all"
+                title="Copiar día"
               >
-                <span>📋</span>
-                Copiar
+                📋
               </button>
 
               <button
@@ -2293,7 +2279,7 @@ const RutinaGym: React.FC = () => {
                   const tabla = generarTablaParaSheets();
                   try {
                     await navigator.clipboard.writeText(tabla);
-                    alert("✅ Tabla copiada — pegá en Google Sheets");
+                    alert("✅ Tabla copiada");
                   } catch {
                     const ta = document.createElement("textarea");
                     ta.value = tabla;
@@ -2301,26 +2287,20 @@ const RutinaGym: React.FC = () => {
                     ta.select();
                     document.execCommand("copy");
                     document.body.removeChild(ta);
-                    alert("✅ Tabla copiada (fallback)");
+                    alert("✅ Tabla copiada");
                   }
                 }}
-                className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-all"
+                className="w-10 h-10 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all"
+                title="Exportar a Sheets"
               >
-                <span>📑</span>
-                Exportar
+                📑
               </button>
-
-              {/* Indicador de scroll (para cuando hay muchos ejercicios) */}
-              <div className="text-xs text-slate-500 flex items-center gap-1">
-                <span>↓</span>
-                Scroll
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Espacio para evitar que el contenido quede detrás de la barra fija */}
-        <div className="h-28"></div>
+        {/* Espacio reducido para la barra */}
+        <div className="h-16"></div>
       </div>
 
       {selectorOpen.open && (
@@ -2529,6 +2509,29 @@ const RutinaGym: React.FC = () => {
       )}
 
       <style>{`
+      /* Asegurar que no hay márgenes/paddings no deseados */
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+      }
+      
+      /* Eliminar cualquier borde blanco en iOS */
+      @supports (padding-top: env(safe-area-inset-top)) {
+        body {
+          padding-top: env(safe-area-inset-top);
+          padding-bottom: env(safe-area-inset-bottom);
+          padding-left: env(safe-area-inset-left);
+          padding-right: env(safe-area-inset-right);
+        }
+      }
+      
+      /* Asegurar que el color de fondo cubra todo */
+      html, body, #root {
+        background-color: #0f172a;
+        margin: 0;
+        padding: 0;
+      }
   @media print {
     * { box-shadow: none !important; }
     a, button { display: none !important; }
