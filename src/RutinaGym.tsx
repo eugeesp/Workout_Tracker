@@ -841,6 +841,8 @@ const RutinaGym: React.FC = () => {
   );
 
   const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
+  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
+  const [isSwiping, setIsSwiping] = useState(false);
 
   // === NUEVOS ESTADOS: Peso Corporal y Notas ===
   const [bodyWeight, setBodyWeight] = useState<string>("");
@@ -945,6 +947,49 @@ const RutinaGym: React.FC = () => {
   const getExerciseNote = (exerciseId: string | undefined): string => {
     if (!exerciseId) return "";
     return exerciseNotes[exerciseId] ?? "";
+  };
+
+  // Navegación entre días
+  const nextDay = () => {
+    const currentIndex = dias.indexOf(selectedDay);
+    const nextIndex = (currentIndex + 1) % dias.length;
+    setSelectedDay(dias[nextIndex]);
+    setExpandedExercise(null);
+  };
+
+  const previousDay = () => {
+    const currentIndex = dias.indexOf(selectedDay);
+    const prevIndex = (currentIndex - 1 + dias.length) % dias.length;
+    setSelectedDay(dias[prevIndex]);
+    setExpandedExercise(null);
+  };
+
+  // Handlers para swipe
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSwipeStartX(e.touches[0].clientX);
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swipeStartX || !isSwiping) return;
+
+    const currentX = e.touches[0].clientX;
+    const diff = swipeStartX - currentX;
+
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        nextDay();
+      } else {
+        previousDay();
+      }
+      setSwipeStartX(null);
+      setIsSwiping(false);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    setSwipeStartX(null);
   };
 
   // Cargar datos desde IndexedDB al montar
@@ -1645,236 +1690,103 @@ const RutinaGym: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0 safe-area-top safe-area-bottom">
       <div className="max-w-7xl mx-auto">
         {/* Header compacto */}
-        <div className="bg-slate-800 rounded-lg shadow-xl p-2 md:p-4 mb-2 border border-slate-700 print:shadow-none print:border-0 print:bg-white">
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white print:text-slate-900">
-                  💪 Rutina Hipertrofia
+        <div
+          className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-lg border-b border-slate-700 safe-area-top"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="p-3">
+            {/* Línea 1: Navegación y día actual */}
+            <div className="flex items-center justify-between mb-2">
+              <button
+                onClick={previousDay}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 active:scale-95 transition-all"
+              >
+                <span className="text-white text-lg">←</span>
+              </button>
+
+              <div className="flex-1 text-center mx-2">
+                <h1 className="text-white font-bold text-sm truncate">
+                  {day.nombre.split(" - ")[1] || day.nombre}
                 </h1>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setShowHistory(!showHistory)}
-                  className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 text-[11px] rounded transition print:hidden"
-                >
-                  📊 ({history.length})
-                </button>
-                <button
-                  onClick={copiarDiaCompleto}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
-                  title="Copiar día"
-                >
-                  📋 Copiar día
-                </button>
-                <button
-                  onClick={async () => {
-                    const tabla = generarTablaParaSheets();
-                    try {
-                      await navigator.clipboard.writeText(tabla);
-                      alert(
-                        "✅ Tabla copiada — pegá en Google Sheets (Ctrl/Cmd+V)"
-                      );
-                    } catch {
-                      // Fallback iOS / permisos
-                      const ta = document.createElement("textarea");
-                      ta.value = tabla;
-                      document.body.appendChild(ta);
-                      ta.select();
-                      document.execCommand("copy");
-                      document.body.removeChild(ta);
-                      alert(
-                        "✅ Tabla copiada (fallback) — pegá en Google Sheets"
-                      );
-                    }
-                  }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 text-xs rounded transition print:hidden"
-                  title="Copiar tabla TSV para Sheets"
-                >
-                  📑 Exportar Tabla
-                </button>
-              </div>
-            </div>
-
-            {/* Botones colapsables */}
-            <div className="flex gap-2 text-xs print:hidden">
-              <button
-                onClick={() => setShowLegend(!showLegend)}
-                className="text-slate-300 hover:text-white underline"
-              >
-                {showLegend ? "Ocultar" : "Ver"} colores
-              </button>
-              <button
-                onClick={() => setShowVolumenSemanal(!showVolumenSemanal)}
-                className="text-slate-300 hover:text-white underline"
-              >
-                {showVolumenSemanal ? "Ocultar" : "Ver"} volumen semanal
-              </button>
-            </div>
-
-            {/* Leyenda colapsable */}
-            {showLegend && (
-              <div className="bg-slate-700 rounded p-2">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
-                  {Object.entries(colorLegend).map(([key, value]) => (
+                <div className="flex justify-center items-center gap-1 mt-1">
+                  {dias.map((dia) => (
                     <div
-                      key={key}
-                      className={`${value.bg} ${value.border} border rounded px-2 py-0.5 text-center text-xs`}
-                    >
-                      <span className={`${value.text} font-medium capitalize`}>
-                        {key}
-                      </span>
-                    </div>
+                      key={dia}
+                      className={`w-1.5 h-1.5 rounded-full transition-all ${
+                        selectedDay === dia
+                          ? "bg-white scale-125"
+                          : "bg-slate-600"
+                      }`}
+                    />
                   ))}
                 </div>
               </div>
-            )}
 
-            {/* Volumen semanal colapsable */}
-            {showVolumenSemanal && (
-              <div className="bg-slate-700 rounded p-2">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {[...volumenSemanal.entries()].map(
-                    ([grupo, { min, max }]) => (
-                      <div
-                        key={grupo}
-                        className={`rounded p-2 border text-xs ${colorLegend[grupo].border} ${colorLegend[grupo].bg}`}
-                      >
-                        <div
-                          className={`font-semibold ${colorLegend[grupo].text} capitalize`}
-                        >
-                          {grupo}
-                        </div>
-                        <div className="text-slate-700 font-mono text-xs">
-                          {min === max ? min : `${min}–${max}`} series
-                        </div>
-                      </div>
-                    )
+              <button
+                onClick={nextDay}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 active:scale-95 transition-all"
+              >
+                <span className="text-white text-lg">→</span>
+              </button>
+            </div>
+
+            {/* Línea 2: Estado de sesión + acciones rápidas */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1 bg-emerald-800/80 rounded-full px-2 py-1">
+                  <span className="text-emerald-200">🟢</span>
+                  <span className="text-white font-semibold">
+                    {completedCount}/{day.ejercicios.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-blue-800/80 rounded-full px-2 py-1">
+                  <span className="text-white font-semibold">
+                    {currentVolume} kg
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-800 rounded-full px-2 py-1">
+                  <span className="text-slate-300">{elapsedMin}m</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <div className="relative group">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={bodyWeight}
+                    onChange={(e) => setBodyWeight(e.target.value)}
+                    placeholder="⚖️"
+                    className="w-12 h-8 text-center bg-slate-800 border border-slate-600 rounded text-white text-xs font-semibold placeholder-slate-400"
+                  />
+                  {bodyWeight && (
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Selector de días */}
-        <div className="flex gap-1 mb-3 overflow-x-auto pb-2 print:hidden">
-          {dias.map((dia) => (
-            <button
-              key={dia}
-              onClick={() => setSelectedDay(dia)}
-              className={`px-3 py-2 rounded text-sm font-semibold transition whitespace-nowrap ${
-                selectedDay === dia
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300"
-              }`}
-            >
-              {dia.charAt(0).toUpperCase() + dia.slice(1)}
-            </button>
-          ))}
-        </div>
-        {/* STATUS BAR — mobile-first + sticky */}
-        <div
-          className="sticky top-[calc(env(safe-area-inset-top)+8px)] z-30 print:hidden"
-          style={{
-            WebkitBackdropFilter: "blur(6px)",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <div className="bg-slate-800/85 border border-slate-700 rounded-lg px-2 py-1.5 mb-3 overflow-x-auto no-scrollbar">
-            {/* Línea única (iPhone): chips desplazables */}
-            <div className="flex items-center gap-2 whitespace-nowrap md:hidden">
-              {/* Peso corporal */}
-              <div className="flex items-center gap-1 bg-slate-700 rounded px-2 py-1">
-                <span className="text-xs text-slate-300">⚖️</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={bodyWeight}
-                  onChange={(e) => setBodyWeight(e.target.value)}
-                  placeholder="kg"
-                  className="w-16 text-xs font-semibold bg-transparent outline-none text-slate-100 placeholder:text-slate-400"
-                />
-              </div>
-
-              {/* En curso */}
-              <div className="flex items-center gap-1 bg-emerald-800/70 rounded px-2 py-1">
-                <span className="text-xs">
-                  🟢 {new Date().toLocaleDateString("es-AR")}
-                </span>
-                <span className="text-[10px] bg-emerald-900/70 rounded px-1 py-[2px] text-white font-mono">
-                  {completedCount}/{day.ejercicios.length}
-                </span>
-                <span className="text-xs font-semibold">
-                  {currentVolume} kg
-                </span>
-                <span className="text-xs">{elapsedMin} min</span>
-              </div>
-
-              {/* Última sesión (si existe) */}
-              {previousSession && (
-                <div className="flex items-center gap-1 bg-slate-700 rounded px-2 py-1">
-                  <span className="text-xs">
-                    🔄 {formatDate(previousSession.date).split(",")[0]}
-                  </span>
-                  <span className="text-xs font-semibold">
-                    {previousSession.totalVolume} kg
-                  </span>
-                  <span className="text-xs">
-                    {previousSession.duration ?? "–"} min
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Layout para md+ (se muestra en iPad/desktop) */}
-            <div className="hidden md:grid md:grid-cols-3 md:items-center md:gap-2 text-xs">
-              {/* Col 1: peso */}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-300">⚖️ Peso corporal</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={bodyWeight}
-                  onChange={(e) => setBodyWeight(e.target.value)}
-                  placeholder="kg"
-                  className="w-20 px-2 py-1 rounded bg-white/90 text-slate-800 text-xs font-semibold"
-                />
-                {bodyWeight && (
-                  <span className="text-[10px] text-slate-400">
-                    ✓ al finalizar
-                  </span>
-                )}
-              </div>
-
-              {/* Col 2: en curso */}
-              <div className="flex items-center gap-3 justify-center">
-                <span>🟢 {new Date().toLocaleDateString("es-AR")}</span>
-                <span className="px-2 py-0.5 rounded bg-slate-700 text-white font-mono">
-                  {completedCount}/{day.ejercicios.length}
-                </span>
-                <span className="font-semibold">{currentVolume} kg</span>
-                <span>{elapsedMin} min</span>
-              </div>
-
-              {/* Col 3: última sesión */}
-              <div className="flex items-center gap-3 justify-end text-slate-300">
-                {previousSession ? (
-                  <>
-                    <span>
-                      🔄 {formatDate(previousSession.date).split(",")[0]}
-                    </span>
-                    <span className="font-semibold">
-                      {previousSession.totalVolume} kg
-                    </span>
-                    <span>{previousSession.duration ?? "–"} min</span>
-                  </>
-                ) : (
-                  <span className="text-slate-500">Sin sesiones previas</span>
-                )}
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 rounded transition-all"
+                  title="Historial"
+                >
+                  <span className="text-slate-300 text-sm">📊</span>
+                </button>
               </div>
             </div>
           </div>
+
+          {isSwiping && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
+          )}
+        </div>
+
+        {/* Mensaje educativo */}
+        <div className="bg-blue-900/50 border border-blue-700 rounded-lg mx-4 mt-2 p-2 text-center">
+          <p className="text-blue-200 text-xs">
+            💡 Desliza izquierda/derecha para cambiar de día
+          </p>
         </div>
 
         {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
@@ -2597,6 +2509,24 @@ const RutinaGym: React.FC = () => {
 
   @supports (padding-top: env(safe-area-inset-top)) {
     :root { --safe-top: env(safe-area-inset-top); }
+  }
+  @keyframes swipeIndicator {
+    0% { opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+  
+  .animate-pulse-swipe {
+    animation: swipeIndicator 1.5s ease-in-out infinite;
+  }
+  
+  button:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+  }
+  
+  html {
+    scroll-behavior: smooth;
   }
 `}</style>
     </div>
