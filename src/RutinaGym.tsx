@@ -1791,104 +1791,113 @@ const RutinaGym: React.FC = () => {
 
         {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
         {showHistory && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 safe-area-top safe-area-bottom">
-            <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">
-                  📊 Historial de Entrenamientos
-                </h2>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="text-white hover:text-slate-300 text-2xl"
-                >
-                  ✕
-                </button>
+          <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 p-0 md:items-center md:p-4">
+            <div className="bg-slate-900 rounded-t-3xl md:rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-700">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-bold text-lg">📊 Historial</h3>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white text-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Barra de agarre */}
+                <div className="flex justify-center mt-2 md:hidden">
+                  <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
+                </div>
               </div>
 
-              {history.length === 0 ? (
-                <p className="text-slate-400 text-center py-8">
-                  Aún no hay sesiones guardadas. Completa tu primer
-                  entrenamiento!
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {history.map((session, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-700 rounded-lg p-4 border border-slate-600"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="text-lg font-semibold text-white capitalize">
-                            {session.day} - {formatDate(session.date)}
-                          </h3>
-                          <div className="flex gap-4 mt-1 text-sm text-slate-300 flex-wrap">
-                            <span>💪 Volumen: {session.totalVolume} kg</span>
-                            {session.duration && (
-                              <span>⏱️ {session.duration} min</span>
-                            )}
-                            {session.bodyWeight && (
-                              <span>⚖️ {session.bodyWeight} kg</span>
-                            )}
+              {/* Contenido */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {history.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    Aún no hay sesiones guardadas
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {history.map((session, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-800 rounded-xl p-4 border border-slate-700"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="text-white font-semibold capitalize">
+                              {session.day} -{" "}
+                              {new Date(session.date).toLocaleDateString(
+                                "es-AR"
+                              )}
+                            </h4>
+                            <div className="flex gap-3 mt-1 text-sm text-slate-300 flex-wrap">
+                              <span>💪 {session.totalVolume} kg</span>
+                              {session.duration && (
+                                <span>⏱️ {session.duration} min</span>
+                              )}
+                              {session.bodyWeight && (
+                                <span>⚖️ {session.bodyWeight} kg</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="grid gap-2 text-sm">
-                        {Object.entries(session.exercises).map(
-                          ([exId, exData]) => {
-                            const originalEx = rutinaState[
-                              session.day
-                            ].ejercicios.find((e) => e.id === exId);
-                            if (!originalEx) return null;
+                        <div className="space-y-2">
+                          {Object.entries(session.exercises).map(
+                            ([exId, exData]) => {
+                              const originalEx = rutinaState[
+                                session.day
+                              ].ejercicios.find((e) => e.id === exId);
+                              if (!originalEx) return null;
 
-                            const displayEx = exData.alt || originalEx.nombre;
-                            const setsStr = exData.sets
-                              .map((s) => {
-                                const rir = s.rir ? ` (${s.rir})` : "";
-                                return `${s.peso}×${s.reps}${rir}`;
-                              })
-                              .join(" | ");
-
-                            return (
-                              <div
-                                key={exId}
-                                className={`p-2 rounded ${
-                                  exData.completed
-                                    ? "bg-slate-600"
-                                    : "bg-slate-700/50"
-                                }`}
-                              >
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <span
-                                      className={
-                                        exData.completed
-                                          ? "text-white"
-                                          : "text-slate-400"
-                                      }
-                                    >
-                                      {exData.completed ? "✓" : "○"} {displayEx}
-                                    </span>
-                                    <span className="text-slate-300 ml-2 font-mono text-xs">
-                                      {setsStr || "—"}
-                                    </span>
+                              return (
+                                <div
+                                  key={exId}
+                                  className={`p-2 rounded-lg ${
+                                    exData.completed
+                                      ? "bg-slate-700"
+                                      : "bg-slate-700/50"
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span
+                                        className={
+                                          exData.completed
+                                            ? "text-white"
+                                            : "text-slate-400"
+                                        }
+                                      >
+                                        {exData.completed ? "✅" : "○"}{" "}
+                                        {exData.alt || originalEx.nombre}
+                                      </span>
+                                      <div className="text-slate-300 text-xs mt-1 font-mono">
+                                        {exData.sets.map((s, i) => (
+                                          <span key={i} className="mr-2">
+                                            {s.peso}×{s.reps}
+                                            {s.rir ? `(${s.rir})` : ""}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    {exData.notes && (
+                                      <span className="text-slate-400 text-xs italic">
+                                        📝
+                                      </span>
+                                    )}
                                   </div>
-                                  {exData.notes && (
-                                    <span className="text-slate-300 text-xs ml-2 italic">
-                                      📝 {exData.notes}
-                                    </span>
-                                  )}
                                 </div>
-                              </div>
-                            );
-                          }
-                        )}
+                              );
+                            }
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2002,23 +2011,18 @@ const RutinaGym: React.FC = () => {
                           </button>
                         </div>
                       </div>
-
-                      {/* Lista de series - INPUTS MÁS GRANDES */}
+                      {/* Lista de series - LAYOUT FIJO PARA iOS */}
                       <div className="space-y-2">
                         {sets.map((s, sidx) => {
                           const [rirMin, rirMax] = parseRIR(s.rir);
                           return (
-                            <div
-                              key={sidx}
-                              className="flex items-center gap-2 bg-white/50 rounded-lg p-2"
-                            >
+                            <div className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2">
                               <span className="text-xs font-semibold text-slate-700 w-6">
                                 {sidx + 1}.
                               </span>
 
                               <input
                                 type="number"
-                                inputMode="numeric"
                                 placeholder="Reps"
                                 value={s.reps ?? ""}
                                 onChange={(e) =>
@@ -2029,14 +2033,11 @@ const RutinaGym: React.FC = () => {
                                     e.target.value
                                   )
                                 }
-                                className="flex-1 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                               />
-
-                              <span className="text-slate-600 text-sm">×</span>
 
                               <input
                                 type="number"
-                                inputMode="decimal"
                                 placeholder="Kg"
                                 value={s.peso ?? ""}
                                 onChange={(e) =>
@@ -2047,15 +2048,12 @@ const RutinaGym: React.FC = () => {
                                     e.target.value
                                   )
                                 }
-                                className="flex-1 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                               />
-
-                              <span className="text-slate-600 text-sm">×</span>
 
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
-                                  inputMode="numeric"
                                   placeholder="RIR"
                                   value={rirMin ?? ""}
                                   onChange={(e) =>
@@ -2073,7 +2071,6 @@ const RutinaGym: React.FC = () => {
                                 </span>
                                 <input
                                   type="number"
-                                  inputMode="numeric"
                                   placeholder="RIR"
                                   value={rirMax ?? ""}
                                   onChange={(e) =>
@@ -2086,19 +2083,17 @@ const RutinaGym: React.FC = () => {
                                   }
                                   className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
+                                <button
+                                  onClick={() => removeSet(ej.id, sidx)}
+                                  className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center"
+                                >
+                                  −
+                                </button>
                               </div>
-
-                              <button
-                                onClick={() => removeSet(ej.id, sidx)}
-                                className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center flex-shrink-0"
-                              >
-                                −
-                              </button>
                             </div>
                           );
                         })}
                       </div>
-
                       {/* Botones de acción */}
                       <div className="flex flex-wrap gap-2 justify-center pt-2">
                         <button
@@ -2248,121 +2243,173 @@ const RutinaGym: React.FC = () => {
           <p>83kg | 1.75m | 23 años | Hipertrofia + Estética</p>
         </div>
 
-        {/* Barra fija inferior para acciones principales */}
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 p-3 print:hidden safe-area-bottom">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-white text-sm font-semibold">
-                {completedCount}/{day.ejercicios.length}
-              </span>
-              <span className="bg-emerald-700 text-white px-2 py-1 rounded text-sm font-semibold">
-                {currentVolume} kg
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() =>
-                  setSelectorOpen({
-                    open: true,
-                    mode: "add",
-                    grupo: undefined,
-                  })
-                }
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-semibold"
-              >
-                + Ejercicio
-              </button>
+        {/* Barra inferior fija - Acciones principales */}
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-700 safe-area-bottom z-40">
+          <div className="p-3">
+            {/* Fila 1: Acciones principales */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              {/* Botón FIN - Prioridad máxima */}
               <button
                 onClick={finalizarSesion}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-semibold"
+                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
               >
-                ✓ Finalizar
+                <span className="text-lg">✓</span>
+                FINALIZAR
               </button>
+
+              {/* Botón AGREGAR EJERCICIO */}
+              <button
+                onClick={() =>
+                  setSelectorOpen({ open: true, mode: "add", grupo: undefined })
+                }
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <span className="text-lg">+</span>
+                AGREGAR
+              </button>
+
+              {/* Botón RESET - Secundario */}
+              <button
+                onClick={resetDay}
+                className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm active:scale-95 transition-all"
+                title="Reiniciar día"
+              >
+                🔄
+              </button>
+            </div>
+
+            {/* Fila 2: Acciones secundarias */}
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={copiarDiaCompleto}
+                className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-all"
+              >
+                <span>📋</span>
+                Copiar
+              </button>
+
+              <button
+                onClick={async () => {
+                  const tabla = generarTablaParaSheets();
+                  try {
+                    await navigator.clipboard.writeText(tabla);
+                    alert("✅ Tabla copiada — pegá en Google Sheets");
+                  } catch {
+                    const ta = document.createElement("textarea");
+                    ta.value = tabla;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    alert("✅ Tabla copiada (fallback)");
+                  }
+                }}
+                className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-all"
+              >
+                <span>📑</span>
+                Exportar
+              </button>
+
+              {/* Indicador de scroll (para cuando hay muchos ejercicios) */}
+              <div className="text-xs text-slate-500 flex items-center gap-1">
+                <span>↓</span>
+                Scroll
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Espacio para evitar que el contenido quede detrás de la barra fija */}
+        <div className="h-28"></div>
       </div>
 
-      {/* Selector Inteligente - búsqueda/autocompletado de ejercicios */}
       {selectorOpen.open && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 safe-area-top safe-area-bottom"
-          style={{ zIndex: 9999 }}
-        >
-          <div className="bg-slate-800 rounded-xl w-full max-w-2xl p-4 border border-slate-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-white font-bold text-sm">
-                🔎 Seleccionar ejercicio
-              </h3>
-              <div className="flex gap-2">
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 p-0 md:items-center md:p-4">
+          <div
+            className="bg-slate-900 rounded-t-3xl md:rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-slate-700 md:max-h-[80vh]"
+            style={{
+              boxShadow: "0 -20px 60px rgba(0,0,0,0.5)",
+            }}
+          >
+            {/* Header del modal */}
+            <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-white font-bold text-lg">
+                  💪 Seleccionar Ejercicio
+                </h3>
                 <button
                   onClick={() => setSelectorOpen({ open: false })}
-                  className="text-slate-300 hover:text-white"
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white text-lg"
                 >
                   ✕
                 </button>
               </div>
+
+              {/* Barra de agarre (solo en móvil) */}
+              <div className="flex justify-center mt-2 md:hidden">
+                <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
+              </div>
             </div>
 
-            <div className="mb-3">
+            {/* Búsqueda */}
+            <div className="p-4 border-b border-slate-700">
               <input
                 ref={searchInputRef}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre o grupo (ej: press, espalda)..."
-                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
+                placeholder="🔍 Buscar ejercicio..."
+                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-400 text-base"
               />
-              <div className="text-xs text-slate-400 mt-1">
-                Mostrando sugerencias de la base. Seleccioná para reemplazar el
-                nombre.
-              </div>
             </div>
 
-            <div className="grid gap-2 max-h-64 overflow-y-auto">
+            {/* Lista de ejercicios */}
+            <div className="flex-1 overflow-y-auto">
               {suggestions.length === 0 ? (
-                <div className="text-slate-400 text-sm">
-                  No se encontraron ejercicios.
+                <div className="p-8 text-center text-slate-400">
+                  No se encontraron ejercicios
                 </div>
               ) : (
-                suggestions.map((sug) => {
-                  return (
+                <div className="p-2 space-y-2">
+                  {suggestions.map((sug) => (
                     <button
                       key={sug.id}
                       onClick={() => handleSelectSuggestion(sug)}
-                      className="text-left p-2 rounded hover:bg-slate-700 flex justify-between items-center border border-slate-600 bg-slate-700"
+                      className="w-full text-left p-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 transition-all"
                     >
-                      <div>
-                        <div className="font-semibold text-white text-sm">
-                          {sug.nombre}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-semibold text-white text-sm mb-1">
+                            {sug.nombre}
+                          </div>
+                          <div className="text-xs text-slate-300">
+                            {sug.tempo ? `Tempo: ${sug.tempo} • ` : ""}
+                            {sug.series} series • {sug.reps} reps
+                          </div>
+                          {sug.nota && (
+                            <div className="text-xs text-blue-300 mt-1">
+                              💡 {sug.nota}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-slate-300">
-                          {sug.tempo ? `${sug.tempo} · ` : ""}
-                          {sug.reps} · RPE {sug.rpe}
+                        <div
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            colorLegend[sug.grupo].bg
+                          } ${colorLegend[sug.grupo].text}`}
+                        >
+                          {sug.grupo}
                         </div>
-                      </div>
-                      <div className="text-xs text-slate-400 capitalize">
-                        {sug.grupo}
                       </div>
                     </button>
-                  );
-                })
+                  ))}
+                </div>
               )}
             </div>
 
-            <div className="mt-3 flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  if (selectorOpen.targetId)
-                    setAltName(selectorOpen.targetId, undefined);
-                  setSelectorOpen({ open: false });
-                }}
-                className="px-3 py-1 rounded bg-slate-600 text-white text-sm"
-              >
-                Usar nombre original
-              </button>
+            {/* Footer del modal */}
+            <div className="p-4 border-t border-slate-700 sticky bottom-0 bg-slate-900">
               <button
                 onClick={() => setSelectorOpen({ open: false })}
-                className="px-3 py-1 rounded bg-indigo-600 text-white text-sm"
+                className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold transition-all"
               >
                 Cancelar
               </button>
@@ -2370,7 +2417,6 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
       )}
-
       {/* Modal 1RM (Epley) */}
       {oneRMModal.open && (
         <div
@@ -2528,6 +2574,43 @@ const RutinaGym: React.FC = () => {
   html {
     scroll-behavior: smooth;
   }
+  /* Mejoras para modales móviles */
+@media (max-width: 768px) {
+  .modal-bottom-sheet {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+}
+
+/* Scroll suave en modales */
+.modal-content {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mejorar botones para touch */
+button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Evitar zoom en inputs en iOS */
+@media (max-width: 768px) {
+  input, textarea {
+    font-size: 16px;
+  }
+}
+/* Garantizar que inputs no se salgan en iOS */
+@media (max-width: 768px) {
+  .grid-cols-\\[auto_1fr_1fr_auto\\] {
+    grid-template-columns: auto 1fr 1fr auto;
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
 `}</style>
     </div>
   );
