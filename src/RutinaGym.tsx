@@ -91,7 +91,7 @@ interface DiaRutina {
 interface SessionExercise {
   sets: Array<{ peso?: string; reps?: string; rir?: string }>;
   alt?: string;
-  notes?: string; // NUEVO
+  notes?: string;
   completed: boolean;
 }
 
@@ -100,7 +100,7 @@ interface WorkoutSession {
   day: keyof typeof rutina;
   exercises: Record<string, SessionExercise>;
   totalVolume: number;
-  bodyWeight?: number; // NUEVO
+  bodyWeight?: number;
   duration?: number;
 }
 
@@ -799,11 +799,386 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
 
 const STORAGE_HISTORY = "rg-history-v2" as const;
 const STORAGE_CURRENT = "rg-current-v2" as const;
-// ✅ Nuevo: persistir cambios en la rutina editable
 const STORAGE_RUTINA = "rg-rutina-v1" as const;
 
-// Hook para navegación entre inputs
-const useInputNavigation = () => {
+const RutinaGym: React.FC = () => {
+  // =======================
+  // 1. TODOS LOS HOOKS PRIMERO
+  // =======================
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState<WorkoutSession[]>([]);
+  const [done, setDone] = useState<Record<string, boolean>>({});
+  const [logs, setLogs] = useState<
+    Record<
+      string,
+      {
+        sets?: Array<{ peso?: string; reps?: string; rir?: string }>;
+        alt?: string;
+        notes?: string;
+      }
+    >
+  >({});
+  const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
+    (localStorage.getItem("rg-selectedDay") as keyof typeof rutina) || "lunes"
+  );
+  const [showHistory, setShowHistory] = useState(false);
+  const sessionStartTimeRef = useRef(Date.now());
+  const [showLegend, setShowLegend] = useState(false);
+  const [nowTick, setNowTick] = useState(0);
+  const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
+  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [bodyWeight, setBodyWeight] = useState<string>("");
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(
+    {}
+  );
+  const [selectorOpen, setSelectorOpen] = useState<{
+    open: boolean;
+    targetId?: string;
+    grupo?: Grupo;
+    mode?: "replace" | "add";
+  }>({ open: false });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [oneRMModal, setOneRMModal] = useState<{
+    open: boolean;
+    exerciseId?: string;
+    currentWeight?: string;
+    currentReps?: string;
+  }>({ open: false });
+  const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
+  const [rutinaState, setRutinaState] = useState<typeof rutina | null>(null);
+
+  // useEffect para el timer
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Cargar datos desde IndexedDB al montar
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout cargando datos")), 3000)
+        );
+
+        const result = await Promise.race([
+          Promise.all([getFromDB(STORAGE_HISTORY), getFromDB(STORAGE_CURRENT)]),
+          timeoutPromise,
+        ]);
+
+        const [historyData, currentData] = result as [any, any];
+
+        if (historyData) setHistory(historyData);
+        if (currentData) {
+          setDone(currentData.done || {});
+          const migratedLogs = currentData.logs || {};
+          Object.keys(migratedLogs).forEach((k) => {
+            if (!migratedLogs[k].notes) {
+              migratedLogs[k].notes = undefined;
+            }
+          });
+          setLogs(migratedLogs);
+
+          if (currentData.bodyWeight) {
+            setBodyWeight(currentData.bodyWeight.toString());
+          }
+
+          const loadedNotes: Record<string, string> = {};
+          Object.keys(migratedLogs).forEach((k) => {
+            const notes = migratedLogs[k].notes;
+            if (notes && notes.trim()) {
+              const exerciseId = k.split(":")[1];
+              if (exerciseId) {
+                loadedNotes[exerciseId] = notes;
+              }
+            }
+          });
+          setExerciseNotes(loadedNotes);
+        }
+      } catch (error) {
+        console.error("Error o timeout loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Cargar rutina persistida al montar
+  useEffect(() => {
+    const loadRutina = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout cargando rutina")), 3000)
+        );
+
+        const stored = await Promise.race([
+          getFromDB(STORAGE_RUTINA),
+          timeoutPromise,
+        ]);
+
+        if (stored) {
+          console.log("📥 Rutina cargada desde DB:", stored);
+          setRutinaState(stored);
+        } else {
+          console.log("📝 Inicializando rutina por defecto");
+          setRutinaState(
+            Object.fromEntries(
+              dias.map((d) => [d, withIds(rutina[d], d)])
+            ) as typeof rutina
+          );
+        }
+      } catch (err) {
+        console.error("Error o timeout cargando rutina:", err);
+        setRutinaState(
+          Object.fromEntries(
+            dias.map((d) => [d, withIds(rutina[d], d)])
+          ) as typeof rutina
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadRutina();
+  }, []);
+
+  // Guardar rutina cada vez que cambia
+  useEffect(() => {
+    if (rutinaState && Object.keys(rutinaState).length > 0) {
+      console.log("💾 Guardando rutina en DB:", rutinaState);
+      saveToDB(STORAGE_RUTINA, rutinaState).catch((e) =>
+        console.error("Error guardando rutina:", e)
+      );
+    }
+  }, [rutinaState]);
+
+  // Guardar historial
+  useEffect(() => {
+    if (!isLoading && history.length > 0) {
+      saveToDB(STORAGE_HISTORY, history);
+    }
+  }, [history, isLoading]);
+
+  // Guardar sesión actual
+  useEffect(() => {
+    if (!isLoading) {
+      const bodyWeightNum = parseFloat(bodyWeight || "0");
+      saveToDB(STORAGE_CURRENT, {
+        done,
+        logs,
+        bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined,
+      });
+    }
+  }, [done, logs, bodyWeight, isLoading]);
+
+  useEffect(() => {
+    localStorage.setItem("rg-selectedDay", selectedDay);
+  }, [selectedDay]);
+
+  // Auto-focus y sugerencias cuando se abre el selector
+  useEffect(() => {
+    if (selectorOpen.open) {
+      setTimeout(() => searchInputRef.current?.focus(), 60);
+      setSearchTerm("");
+      const byGroup = ejerciciosDB.filter(
+        (ej) => ej.grupo === selectorOpen.grupo
+      );
+      setSuggestions(byGroup.slice(0, 8));
+    } else {
+      setSuggestions([]);
+      setSearchTerm("");
+    }
+  }, [selectorOpen]);
+
+  // Actualizar sugerencias cuando cambia búsqueda
+  useEffect(() => {
+    if (!selectorOpen.open) return;
+    const term = (searchTerm || "").trim();
+    let results: Ejercicio[] = [];
+    if (term === "") {
+      results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
+    } else {
+      results = buscarEjercicios(term);
+    }
+    if (selectorOpen.grupo) {
+      results = results.sort((a, b) =>
+        a.grupo === selectorOpen.grupo ? -1 : 1
+      );
+    }
+    setSuggestions(results.slice(0, 12));
+  }, [searchTerm, selectorOpen]);
+
+  // Pre-cargar valores de última sesión
+  useEffect(() => {
+    if (isLoading) return;
+
+    const lastSession = history
+      .filter((s) => s.day === selectedDay)
+      .sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )[0];
+
+    if (lastSession && Object.keys(logs).length === 0) {
+      const migrated = Object.fromEntries(
+        Object.entries(lastSession.exercises).map(([exId, exData]) => [
+          `${lastSession.day}:${exId}`,
+          exData,
+        ])
+      );
+      setLogs(migrated as any);
+    }
+  }, [selectedDay, isLoading, history]);
+
+  // =======================
+  // 2. LOS useMemo
+  // =======================
+  const previousSession = useMemo(() => {
+    return history
+      .filter((s) => s.day === selectedDay)
+      .sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )[0];
+  }, [history, selectedDay]);
+
+  const volumenSemanal = useMemo(() => {
+    if (!rutinaState) return new Map<Grupo, { min: number; max: number }>();
+    const acc = new Map<Grupo, { min: number; max: number }>();
+    dias.forEach((d) => {
+      rutinaState[d].ejercicios.forEach((e) => {
+        const [minS, maxS] = seriesToRange(e.series);
+        const cur = acc.get(e.grupo) || { min: 0, max: 0 };
+        acc.set(e.grupo, { min: cur.min + minS, max: cur.max + maxS });
+      });
+    });
+    return acc;
+  }, [rutinaState]);
+
+  // =======================
+  // 3. AHORA SÍ el return temprano de loading
+  // =======================
+  if (isLoading || !rutinaState) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center safe-area-top safe-area-bottom">
+        <div className="text-white text-xl">Cargando rutina... 💪</div>
+      </div>
+    );
+  }
+
+  // =======================
+  // 4. EL RESTO DEL CÓDIGO
+  // =======================
+
+  const day = rutinaState[selectedDay];
+
+  const elapsedMin = Math.max(
+    0,
+    Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
+  );
+
+  const parseNumber = (v?: string) => {
+    const n = parseFloat((v ?? "").toString().replace(",", "."));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const parseRIR = (rirStr?: string): [number | null, number | null] => {
+    if (!rirStr || !rirStr.trim()) return [null, null];
+    const parts = rirStr
+      .trim()
+      .split("-")
+      .map((p) => {
+        const n = parseInt(p.trim(), 10);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      });
+    if (parts[0] === null) return [null, null];
+    return [parts[0], parts[1] ?? null];
+  };
+
+  const formatRIR = (min?: number | null, max?: number | null): string => {
+    if (min === null || min === undefined) return "";
+    if (max === null || max === undefined) return min.toString();
+    return `${min}-${max}`;
+  };
+
+  const isValidRIR = (min?: number | null, max?: number | null): boolean => {
+    if (min === null || min === undefined) return false;
+    if (max === null || max === undefined) return true;
+    return max <= min;
+  };
+
+  const setExerciseNote = (exerciseId: string | undefined, note: string) => {
+    if (!exerciseId) return;
+    const trimmedNote = note.trim();
+
+    setExerciseNotes((prev) => {
+      const newNotes = { ...prev };
+      if (trimmedNote === "") {
+        delete newNotes[exerciseId];
+      } else {
+        newNotes[exerciseId] = trimmedNote;
+      }
+      return newNotes;
+    });
+
+    const k = keyFor(exerciseId);
+    const entry = ensureEntry(k);
+    setLogs((prev) => ({
+      ...prev,
+      [k]: { ...entry, notes: trimmedNote || undefined },
+    }));
+  };
+
+  const getExerciseNote = (exerciseId: string | undefined): string => {
+    if (!exerciseId) return "";
+    return exerciseNotes[exerciseId] ?? "";
+  };
+
+  const nextDay = () => {
+    const currentIndex = dias.indexOf(selectedDay);
+    const nextIndex = (currentIndex + 1) % dias.length;
+    setSelectedDay(dias[nextIndex]);
+    setExpandedExercise(null);
+  };
+
+  const previousDay = () => {
+    const currentIndex = dias.indexOf(selectedDay);
+    const prevIndex = (currentIndex - 1 + dias.length) % dias.length;
+    setSelectedDay(dias[prevIndex]);
+    setExpandedExercise(null);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSwipeStartX(e.touches[0].clientX);
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swipeStartX || !isSwiping) return;
+
+    const currentX = e.touches[0].clientX;
+    const diff = swipeStartX - currentX;
+
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        nextDay();
+      } else {
+        previousDay();
+      }
+      setSwipeStartX(null);
+      setIsSwiping(false);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    setSwipeStartX(null);
+  };
+
+  // Hook para navegación entre inputs
   const createInputProps = (
     exerciseId: string,
     setIndex: number,
@@ -849,347 +1224,13 @@ const useInputNavigation = () => {
     };
   };
 
-  return { createInputProps };
-};
-
-const RutinaGym: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [history, setHistory] = useState<WorkoutSession[]>([]);
-
-  const [done, setDone] = useState<Record<string, boolean>>({});
-
-  const [logs, setLogs] = useState<
-    Record<
-      string,
-      {
-        sets?: Array<{ peso?: string; reps?: string; rir?: string }>;
-        alt?: string;
-        notes?: string;
-      }
-    >
-  >({});
-
-  const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
-    (localStorage.getItem("rg-selectedDay") as keyof typeof rutina) || "lunes"
-  );
-
-  const [showHistory, setShowHistory] = useState(false);
-  const [sessionStartTime] = useState<number>(() => Date.now());
-  const [showLegend, setShowLegend] = useState(false);
-  // === Resumen EN CURSO (tick para refrescar minutos) ===
-  const [nowTick, setNowTick] = useState(0);
-  useEffect(() => {
-    // Refresca cada 30s para que el contador de minutos avance sin interacción
-    const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Minutos transcurridos desde que se montó la sesión actual
-  const elapsedMin = Math.max(
-    0,
-    Math.round((Date.now() - sessionStartTime) / 60000)
-  );
-
-  const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
-  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
-  const [isSwiping, setIsSwiping] = useState(false);
-
-  // === NUEVOS ESTADOS: Peso Corporal y Notas ===
-  const [bodyWeight, setBodyWeight] = useState<string>("");
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(
-    {}
-  );
-
-  // === SELECTOR INTELIGENTE (estado) ===
-  const [selectorOpen, setSelectorOpen] = useState<{
-    open: boolean;
-    targetId?: string;
-    grupo?: Grupo;
-    mode?: "replace" | "add";
-  }>({ open: false });
-  const [searchTerm, setSearchTerm] = useState("");
-  const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  // === Nuevo: Modal 1RM (Epley) ===
-  const [oneRMModal, setOneRMModal] = useState<{
-    open: boolean;
-    exerciseId?: string;
-    currentWeight?: string;
-    currentReps?: string;
-  }>({ open: false });
-
-  // =======================
-  // NUEVO: Estado para controlar expansión (MEJORA 2)
-  // =======================
-  const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
-
-  // Hook para navegación entre inputs
-  const { createInputProps } = useInputNavigation();
-
-  const openOneRMFor = (exerciseId?: string) => {
-    // usar último set completado o primer set por defecto
-    const k = `${selectedDay}:${exerciseId ?? ""}`;
-    const filled = (logs[k]?.sets ?? []).filter(
-      (s: any) =>
-        !!s &&
-        (s.peso ?? "").toString().trim() !== "" &&
-        (s.reps ?? "").toString().trim() !== ""
-    );
-    const last =
-      filled.length > 0
-        ? filled[filled.length - 1]
-        : getSets(exerciseId, 3)[0] || { peso: "", reps: "" };
-    setOneRMModal({
-      open: true,
-      exerciseId,
-      currentWeight: (last.peso ?? "").toString(),
-      currentReps: (last.reps ?? "").toString(),
-    });
-  };
-
-  const parseNumber = (v?: string) => {
-    const n = parseFloat((v ?? "").toString().replace(",", "."));
-    return Number.isFinite(n) ? n : NaN;
-  };
-
-  // === Nuevo: parsear RIR desde string "2" o "2-1" a [min, max] ===
-  const parseRIR = (rirStr?: string): [number | null, number | null] => {
-    if (!rirStr || !rirStr.trim()) return [null, null];
-    const parts = rirStr
-      .trim()
-      .split("-")
-      .map((p) => {
-        const n = parseInt(p.trim(), 10);
-        return Number.isFinite(n) && n >= 0 ? n : null;
-      });
-    if (parts[0] === null) return [null, null];
-    return [parts[0], parts[1] ?? null];
-  };
-
-  // === Nuevo: formatear RIR desde [min, max] a string ===
-  const formatRIR = (min?: number | null, max?: number | null): string => {
-    if (min === null || min === undefined) return "";
-    if (max === null || max === undefined) return min.toString();
-    return `${min}-${max}`;
-  };
-
-  // === Nuevo: validar RIR (min requerido, max <= min) ===
-  const isValidRIR = (min?: number | null, max?: number | null): boolean => {
-    if (min === null || min === undefined) return false;
-    if (max === null || max === undefined) return true; // max opcional
-    return max <= min;
-  };
-
-  // Helper para actualizar notas de ejercicio
-  const setExerciseNote = (exerciseId: string | undefined, note: string) => {
-    if (!exerciseId) return;
-    setExerciseNotes((prev) => ({
-      ...prev,
-      [exerciseId]: note.trim() || undefined,
-    }));
-    // Sincronizar con logs también
-    const k = keyFor(exerciseId);
-    const entry = ensureEntry(k);
-    setLogs((prev) => ({
-      ...prev,
-      [k]: { ...entry, notes: note.trim() || undefined },
-    }));
-  };
-
-  const getExerciseNote = (exerciseId: string | undefined): string => {
-    if (!exerciseId) return "";
-    return exerciseNotes[exerciseId] ?? "";
-  };
-
-  // Navegación entre días
-  const nextDay = () => {
-    const currentIndex = dias.indexOf(selectedDay);
-    const nextIndex = (currentIndex + 1) % dias.length;
-    setSelectedDay(dias[nextIndex]);
-    setExpandedExercise(null);
-  };
-
-  const previousDay = () => {
-    const currentIndex = dias.indexOf(selectedDay);
-    const prevIndex = (currentIndex - 1 + dias.length) % dias.length;
-    setSelectedDay(dias[prevIndex]);
-    setExpandedExercise(null);
-  };
-
-  // Handlers para swipe
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setSwipeStartX(e.touches[0].clientX);
-    setIsSwiping(true);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!swipeStartX || !isSwiping) return;
-
-    const currentX = e.touches[0].clientX;
-    const diff = swipeStartX - currentX;
-
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        nextDay();
-      } else {
-        previousDay();
-      }
-      setSwipeStartX(null);
-      setIsSwiping(false);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    setIsSwiping(false);
-    setSwipeStartX(null);
-  };
-
-  // Cargar datos desde IndexedDB al montar
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const historyData = await getFromDB(STORAGE_HISTORY);
-        const currentData = await getFromDB(STORAGE_CURRENT);
-
-        if (historyData) setHistory(historyData);
-        if (currentData) {
-          setDone(currentData.done || {});
-          // Migración: asegurar que cada entry tiene notes
-          const migratedLogs = currentData.logs || {};
-          Object.keys(migratedLogs).forEach((k) => {
-            if (!migratedLogs[k].notes) {
-              migratedLogs[k].notes = undefined;
-            }
-          });
-          setLogs(migratedLogs);
-
-          // Cargar bodyWeight si existe
-          if (currentData.bodyWeight) {
-            setBodyWeight(currentData.bodyWeight.toString());
-          }
-
-          // Cargar exerciseNotes desde logs
-          const loadedNotes: Record<string, string> = {};
-          Object.keys(migratedLogs).forEach((k) => {
-            const notes = migratedLogs[k].notes;
-            if (notes && notes.trim()) {
-              // Extraer el exerciseId de la clave (formato: "dia:exerciseId")
-              const exerciseId = k.split(":")[1];
-              if (exerciseId) {
-                loadedNotes[exerciseId] = notes;
-              }
-            }
-          });
-          setExerciseNotes(loadedNotes);
-        }
-      } catch (error) {
-        console.error("Error loading data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  // Auto-focus y cálculo de sugerencias cuando se abre el selector
-  useEffect(() => {
-    if (selectorOpen.open) {
-      // small timeout to ensure input is mounted
-      setTimeout(() => searchInputRef.current?.focus(), 60);
-      setSearchTerm(""); // empezar limpio
-      const byGroup = ejerciciosDB.filter(
-        (ej) => ej.grupo === selectorOpen.grupo
-      );
-      setSuggestions(byGroup.slice(0, 8));
-    } else {
-      setSuggestions([]);
-      setSearchTerm("");
-    }
-  }, [selectorOpen]);
-
-  // Actualizar sugerencias cuando cambia el término de búsqueda
-  useEffect(() => {
-    if (!selectorOpen.open) return;
-    const term = (searchTerm || "").trim();
-    let results: Ejercicio[] = [];
-    if (term === "") {
-      results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
-    } else {
-      results = buscarEjercicios(term);
-    }
-    // Priorizar mismo grupo si target tiene grupo
-    if (selectorOpen.grupo) {
-      results = results.sort((a, b) =>
-        a.grupo === selectorOpen.grupo ? -1 : 1
-      );
-    }
-    setSuggestions(results.slice(0, 12));
-  }, [searchTerm, selectorOpen]);
-
-  useEffect(() => {
-    localStorage.setItem("rg-selectedDay", selectedDay);
-  }, [selectedDay]);
-
-  // Guardar historial en IndexedDB
-  useEffect(() => {
-    if (!isLoading && history.length > 0) {
-      saveToDB(STORAGE_HISTORY, history);
-    }
-  }, [history, isLoading]);
-
-  // Guardar sesión actual en IndexedDB (MODIFICADO: incluir bodyWeight)
-  useEffect(() => {
-    if (!isLoading) {
-      const bodyWeightNum = parseFloat(bodyWeight || "0");
-      saveToDB(STORAGE_CURRENT, {
-        done,
-        logs,
-        bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined,
-      });
-    }
-  }, [done, logs, bodyWeight, isLoading]);
-
-  // =======================
-  // RUTINA EDITABLE (estado persistido)
-  // =======================
-  // Inicializar desde IndexedDB si existe, si no desde la constante `rutina`
-  const [rutinaState, setRutinaState] = useState<typeof rutina>(() => {
-    return Object.fromEntries(
-      dias.map((d) => [d, withIds(rutina[d], d)])
-    ) as typeof rutina;
-  });
-
-  // Cargar rutina persistida al montar (si hay)
-  useEffect(() => {
-    const loadRutina = async () => {
-      try {
-        const stored = await getFromDB(STORAGE_RUTINA);
-        if (stored) {
-          setRutinaState(stored);
-        }
-      } catch (err) {
-        console.error("Error cargando rutina desde DB:", err);
-      }
-    };
-    loadRutina();
-  }, []);
-
-  // Guardar rutina cada vez que cambia
-  useEffect(() => {
-    saveToDB(STORAGE_RUTINA, rutinaState).catch((e) => console.error(e));
-  }, [rutinaState]);
-
-  // =======================
-  // Helpers para modificar la rutina (add / remove / update / move)
-  // =======================
   const updateExercise = (
     day: keyof typeof rutinaState,
     ejId: string,
     patch: Partial<Ejercicio>
   ) => {
     setRutinaState((prev) => {
+      if (!prev) return prev;
       const copy = { ...prev };
       copy[day] = {
         ...copy[day],
@@ -1203,6 +1244,7 @@ const RutinaGym: React.FC = () => {
 
   const addExercise = (day: keyof typeof rutinaState, ejercicio: Ejercicio) => {
     setRutinaState((prev) => {
+      if (!prev) return prev;
       const copy = { ...prev };
       const newId = `${day}-E${Date.now().toString(36)}`;
       copy[day] = {
@@ -1214,7 +1256,6 @@ const RutinaGym: React.FC = () => {
   };
 
   const removeExercise = (day: keyof typeof rutinaState, ejId: string) => {
-    // limpiar logs/done relacionados
     setDone((d) => {
       const copy = { ...d };
       Object.keys(copy).forEach((k) => {
@@ -1231,6 +1272,7 @@ const RutinaGym: React.FC = () => {
     });
 
     setRutinaState((prev) => {
+      if (!prev) return prev;
       const copy = { ...prev };
       copy[day] = {
         ...copy[day],
@@ -1246,6 +1288,7 @@ const RutinaGym: React.FC = () => {
     dir: "up" | "down"
   ) => {
     setRutinaState((prev) => {
+      if (!prev) return prev;
       const copy = { ...prev };
       const arr = copy[day].ejercicios.slice();
       const idx = arr.findIndex((e) => e.id === ejId);
@@ -1260,19 +1303,15 @@ const RutinaGym: React.FC = () => {
     });
   };
 
-  // =======================
-  // Cuando se selecciona una sugerencia en el selector (aplica metadata automáticamente)
-  // =======================
   const handleSelectSuggestion = (sug: Ejercicio) => {
     if (!selectorOpen.open) return;
-    // Modo "add": agrega el ejercicio completo a la rutina del día seleccionado
+
     if (selectorOpen.mode === "add") {
       addExercise(selectedDay, { ...sug, id: undefined });
       setSelectorOpen({ open: false });
       return;
     }
 
-    // Modo "replace": reemplaza metadata y nombre (alt) del ejercicio objetivo
     if (selectorOpen.mode === "replace" && selectorOpen.targetId) {
       updateExercise(selectedDay, selectorOpen.targetId, {
         nombre: sug.nombre,
@@ -1283,60 +1322,13 @@ const RutinaGym: React.FC = () => {
         nota: sug.nota,
         grupo: sug.grupo,
       });
-      // actualizar nombre alternativo en logs para consistencia con lo mostrado
       setAltName(selectorOpen.targetId, sug.nombre);
       setSelectorOpen({ open: false });
       return;
     }
 
-    // Fallback: cerrar selector
     setSelectorOpen({ open: false });
   };
-
-  // Reemplazar uso de rutinaConIds por rutinaState en todo el componente
-
-  // Pre-cargar valores de última sesión del mismo día
-  useEffect(() => {
-    if (isLoading) return;
-
-    const lastSession = history
-      .filter((s) => s.day === selectedDay)
-      .sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )[0];
-
-    if (lastSession && Object.keys(logs).length === 0) {
-      // Migrar las claves de session.exercises (que están guardadas como ej.id)
-      // a las claves que usa `logs` (formato: "dia:ejId")
-      const migrated = Object.fromEntries(
-        Object.entries(lastSession.exercises).map(([exId, exData]) => [
-          `${lastSession.day}:${exId}`,
-          exData,
-        ])
-      );
-      setLogs(migrated as any);
-    }
-  }, [selectedDay, isLoading, history]);
-
-  const previousSession = useMemo(() => {
-    return history
-      .filter((s) => s.day === selectedDay)
-      .sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )[0];
-  }, [history, selectedDay]);
-
-  const volumenSemanal = useMemo(() => {
-    const acc = new Map<Grupo, { min: number; max: number }>();
-    dias.forEach((d) => {
-      rutinaState[d].ejercicios.forEach((e) => {
-        const [minS, maxS] = seriesToRange(e.series);
-        const cur = acc.get(e.grupo) || { min: 0, max: 0 };
-        acc.set(e.grupo, { min: cur.min + minS, max: cur.max + maxS });
-      });
-    });
-    return acc;
-  }, [rutinaState]);
 
   const exportToCSV = () => {
     let csv =
@@ -1374,8 +1366,6 @@ const RutinaGym: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // --- TSV para Google Sheets: 1ª fila = Fecha + Día + (peso en col E),
-  // luego ejercicios debajo del Día (col B). Sin encabezados.
   const sanitizeTSV = (v: any): string => {
     if (v === null || v === undefined) return "";
     return String(v).replace(/\t/g, " ").replace(/\r?\n/g, " / ").trim();
@@ -1386,25 +1376,47 @@ const RutinaGym: React.FC = () => {
     return raw === "" ? "-" : raw;
   };
 
+  const openOneRMFor = (exerciseId?: string) => {
+    const k = `${selectedDay}:${exerciseId ?? ""}`;
+    const filled = (logs[k]?.sets ?? []).filter(
+      (s: any) =>
+        !!s &&
+        (s.peso ?? "").toString().trim() !== "" &&
+        (s.reps ?? "").toString().trim() !== ""
+    );
+    const last =
+      filled.length > 0
+        ? filled[filled.length - 1]
+        : getSets(exerciseId, 3)[0] || { peso: "", reps: "" };
+    setOneRMModal({
+      open: true,
+      exerciseId,
+      currentWeight: (last.peso ?? "").toString(),
+      currentReps: (last.reps ?? "").toString(),
+    });
+  };
+
   const generarTablaParaSheets = (): string => {
     const fechaStr = new Date().toISOString().split("T")[0];
     let tsv = "";
 
-    // Fila 1 — A: Fecha | B: Día/Grupo | C: (vacío) | D: (vacío) | E: Peso | F: (vacío)
     const pesoStr = bodyWeight ? sanitizeTSV(bodyWeight) : "";
     tsv += `${fechaStr}\t${sanitizeTSV(day.nombre)}\t\t\t${pesoStr}\t\n`;
 
-    // Filas siguientes — A: (vacío) | B: Ejercicio | C: Reps | D: RIR | E: (vacío) | F: Notas
     day.ejercicios.forEach((ej) => {
       const k = keyFor(ej.id);
       const entry = logs[k];
-      const sets = Array.isArray(entry?.sets) ? entry!.sets : [];
+
+      const sets = (Array.isArray(entry?.sets) ? entry.sets : []) as Array<{
+        peso?: string;
+        reps?: string;
+        rir?: string;
+      }>;
 
       const repsList = sets.map((s) => sanitizeTSV(s.reps)).join(",");
       const rirsList = sets.map((s) => asRIR(s.rir)).join(",");
       const nota = sanitizeTSV(getExerciseNote(ej.id) || entry?.notes || "");
 
-      // Anteponemos tab para dejar la col A vacía y alinear bajo la col B (Día)
       tsv += `\t${sanitizeTSV(
         displayName(ej)
       )}\t'${repsList}\t'${rirsList}\t\t${nota}\n`;
@@ -1413,7 +1425,6 @@ const RutinaGym: React.FC = () => {
     return tsv;
   };
 
-  // Copiar día completo (resumen legible para compartir)
   const copiarDiaCompleto = async () => {
     const lines: string[] = [];
     const hoy = new Date();
@@ -1476,38 +1487,51 @@ const RutinaGym: React.FC = () => {
     }
   };
 
-  const day = rutinaState[selectedDay];
-
   const keyFor = (id?: string) => `${selectedDay}:${id ?? ""}`;
   const isDone = (id?: string) => !!done[keyFor(id)];
   const toggleDone = (id?: string) =>
     setDone((d) => ({ ...d, [keyFor(id)]: !isDone(id) }));
 
   const resetDay = () => {
+    console.log("🧹 Limpiando día:", selectedDay);
+
     setDone((d) => {
-      const copy = { ...d } as Record<string, boolean>;
+      const copy = { ...d };
       Object.keys(copy).forEach((k) => {
-        if (k.startsWith(`${selectedDay}:`)) delete copy[k];
+        if (k.startsWith(`${selectedDay}:`)) {
+          delete copy[k];
+        }
       });
       return copy;
     });
+
     setLogs((prev) => {
-      const copy: typeof prev = { ...prev };
+      const copy = { ...prev };
       Object.keys(copy).forEach((k) => {
-        if (k.startsWith(`${selectedDay}:`)) delete copy[k];
+        if (k.startsWith(`${selectedDay}:`)) {
+          delete copy[k];
+        }
       });
       return copy;
     });
-    // Limpiar notas del día
+
     setExerciseNotes((prev) => {
       const copy = { ...prev };
-      day.ejercicios.forEach((ej) => {
-        if (ej.id) delete copy[ej.id];
+      let deletedCount = 0;
+      Object.keys(copy).forEach((exerciseId) => {
+        const exerciseBelongsToDay = rutinaState[selectedDay].ejercicios.some(
+          (ej) => ej.id === exerciseId
+        );
+        if (exerciseBelongsToDay) {
+          delete copy[exerciseId];
+          deletedCount++;
+        }
       });
       return copy;
     });
-    // Limpiar peso corporal
+
     setBodyWeight("");
+    console.log("✅ Día limpiado completamente");
   };
 
   const finalizarSesion = () => {
@@ -1522,7 +1546,7 @@ const RutinaGym: React.FC = () => {
       exercises[ej.id!] = {
         sets: sets,
         alt: entry?.alt,
-        notes: entry?.notes, // NUEVO
+        notes: entry?.notes,
         completed: isDone(ej.id),
       };
 
@@ -1533,9 +1557,9 @@ const RutinaGym: React.FC = () => {
       });
     });
 
-    const duration = Math.round((Date.now() - sessionStartTime) / 60000);
-
-    // Parsear bodyWeight
+    const duration = Math.round(
+      (Date.now() - sessionStartTimeRef.current) / 60000
+    );
     const bodyWeightNum = parseFloat(bodyWeight || "0");
 
     const newSession: WorkoutSession = {
@@ -1543,7 +1567,7 @@ const RutinaGym: React.FC = () => {
       day: selectedDay,
       exercises,
       totalVolume: Math.round(totalVolume),
-      bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined, // NUEVO
+      bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined,
       duration,
     };
 
@@ -1570,8 +1594,6 @@ const RutinaGym: React.FC = () => {
     const entry = logs[k];
     const sets = entry?.sets ?? [];
     if (sets.length > 0) return sets;
-
-    // Siempre 1 set vacío por defecto
     return [{ peso: "", reps: "", rir: "" }];
   };
 
@@ -1581,7 +1603,7 @@ const RutinaGym: React.FC = () => {
       const created = {
         sets: [] as Array<{ peso?: string; reps?: string; rir?: string }>,
         alt: undefined as string | undefined,
-        notes: undefined as string | undefined, // NUEVO
+        notes: undefined as string | undefined,
       };
       setLogs((prev) => ({ ...prev, [k]: created }));
       return created;
@@ -1589,11 +1611,11 @@ const RutinaGym: React.FC = () => {
     const neo = {
       sets: e.sets ?? [],
       alt: e.alt,
-      notes: e.notes, // NUEVO
+      notes: e.notes,
     } as {
       sets: Array<{ peso?: string; reps?: string; rir?: string }>;
       alt?: string;
-      notes?: string; // NUEVO
+      notes?: string;
     };
     if (neo !== e) setLogs((prev) => ({ ...prev, [k]: neo }));
     return neo;
@@ -1617,12 +1639,12 @@ const RutinaGym: React.FC = () => {
     } else if (field === "rirMin") {
       const minVal = value.trim() === "" ? null : parseInt(value, 10);
       const [, maxVal] = parseRIR(set.rir);
-      if (minVal !== null && !Number.isFinite(minVal)) return; // rechazar inválido
+      if (minVal !== null && !Number.isFinite(minVal)) return;
       current[idx] = { ...set, rir: formatRIR(minVal, maxVal) };
     } else if (field === "rirMax") {
       const [minVal] = parseRIR(set.rir);
       const maxVal = value.trim() === "" ? null : parseInt(value, 10);
-      if (maxVal !== null && !Number.isFinite(maxVal)) return; // rechazar inválido
+      if (maxVal !== null && !Number.isFinite(maxVal)) return;
       current[idx] = { ...set, rir: formatRIR(minVal, maxVal) };
     }
 
@@ -1675,12 +1697,9 @@ const RutinaGym: React.FC = () => {
     const entry = ensureEntry(k);
     let current = (entry.sets ?? []).slice();
     current = current.filter((s) => isFilled(s));
-
-    // Si todas estaban vacías, dejamos exactamente 1 fila vacía
     if (current.length === 0) {
       current = [{ peso: "", reps: "", rir: "" }];
     }
-
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
@@ -1706,8 +1725,9 @@ const RutinaGym: React.FC = () => {
     0
   );
 
-  const currentVolume = useMemo(() => {
+  const currentVolume = (() => {
     let total = 0;
+
     day.ejercicios.forEach((ej) => {
       const sets = filledSets(ej.id, ej.series);
       sets.forEach((s) => {
@@ -1716,8 +1736,9 @@ const RutinaGym: React.FC = () => {
         total += peso * reps;
       });
     });
+
     return Math.round(total);
-  }, [logs, selectedDay, day.ejercicios]);
+  })();
 
   const formatDate = (isoDate: string) => {
     const d = new Date(isoDate);
@@ -1730,15 +1751,9 @@ const RutinaGym: React.FC = () => {
     });
   };
 
-  // Mostrar loading mientras carga desde IndexedDB
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center safe-area-top safe-area-bottom">
-        <div className="text-white text-xl">Cargando datos... 💪</div>
-      </div>
-    );
-  }
-
+  // =======================
+  // 5. RENDER
+  // =======================
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 md:p-6 print:bg-white print:p-0 safe-area-top safe-area-bottom">
       <div className="max-w-7xl mx-auto">
@@ -1750,7 +1765,6 @@ const RutinaGym: React.FC = () => {
           onTouchEnd={handleTouchEnd}
         >
           <div className="p-3">
-            {/* Línea 1: Navegación y día actual */}
             <div className="flex items-center justify-between mb-2">
               <button
                 onClick={previousDay}
@@ -1759,14 +1773,10 @@ const RutinaGym: React.FC = () => {
                 <span className="text-white text-lg">←</span>
               </button>
 
-              {/* MEJORA 1: Título modificado */}
               <div className="flex-1 text-center mx-2">
-                {/* Título principal: DÍA DE LA SEMANA */}
                 <h1 className="text-white font-bold text-lg capitalize">
                   {selectedDay}
                 </h1>
-
-                {/* Subtítulo: Grupos musculares */}
                 <div className="text-slate-300 text-sm mt-1">
                   {day.nombre.split(" - ")[1] ||
                     day.nombre.replace(
@@ -1777,8 +1787,6 @@ const RutinaGym: React.FC = () => {
                       ""
                     )}
                 </div>
-
-                {/* Indicadores de días (mantener) */}
                 <div className="flex justify-center items-center gap-1 mt-2">
                   {dias.map((dia) => (
                     <div
@@ -1801,7 +1809,6 @@ const RutinaGym: React.FC = () => {
               </button>
             </div>
 
-            {/* Línea 2: Estado de sesión + acciones rápidas */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs">
                 <div className="flex items-center gap-1 bg-emerald-800/80 rounded-full px-2 py-1">
@@ -1856,11 +1863,9 @@ const RutinaGym: React.FC = () => {
           )}
         </div>
 
-        {/* Modal de Historial - ACTUALIZADO con bodyWeight */}
         {showHistory && (
           <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 p-0 md:items-center md:p-4">
             <div className="bg-slate-900 rounded-t-3xl md:rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-700">
-              {/* Header */}
               <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
                 <div className="flex items-center justify-between">
                   <h3 className="text-white font-bold text-lg">📊 Historial</h3>
@@ -1871,14 +1876,11 @@ const RutinaGym: React.FC = () => {
                     ✕
                   </button>
                 </div>
-
-                {/* Barra de agarre */}
                 <div className="flex justify-center mt-2 md:hidden">
                   <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
                 </div>
               </div>
 
-              {/* Contenido */}
               <div className="flex-1 overflow-y-auto p-4">
                 {history.length === 0 ? (
                   <div className="text-center py-8 text-slate-400">
@@ -1914,9 +1916,24 @@ const RutinaGym: React.FC = () => {
                         <div className="space-y-2">
                           {Object.entries(session.exercises).map(
                             ([exId, exData]) => {
-                              const originalEx = rutinaState[
-                                session.day
-                              ].ejercicios.find((e) => e.id === exId);
+                              const dayRutina =
+                                rutinaState[
+                                  session.day as keyof typeof rutinaState
+                                ];
+
+                              // Si por alguna razón esta sesión tiene un "day" que ya no existe en la rutina actual,
+                              // nos salteamos ese ejercicio para no romper todo.
+                              if (!dayRutina) {
+                                console.warn(
+                                  "Sesión con día desconocido en history:",
+                                  session.day
+                                );
+                                return null;
+                              }
+
+                              const originalEx = dayRutina.ejercicios.find(
+                                (e) => e.id === exId
+                              );
                               if (!originalEx) return null;
 
                               return (
@@ -1969,10 +1986,7 @@ const RutinaGym: React.FC = () => {
           </div>
         )}
 
-        {/* MEJORA 2: Contenedor de ejercicios - CARDS en lugar de tabla */}
         <div className="space-y-3 px-2 mt-3 mb-16">
-          {" "}
-          {/* Margen bottom para la barra fija */}
           {day.ejercicios.map((ej, idx) => {
             const colors = colorLegend[ej.grupo];
             const checked = isDone(ej.id);
@@ -1989,10 +2003,8 @@ const RutinaGym: React.FC = () => {
                   isExpanded ? "ring-2 ring-white/20" : ""
                 }`}
               >
-                {/* HEADER DE LA CARD - Siempre visible */}
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    {/* Checkbox y info principal */}
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <input
                         type="checkbox"
@@ -2013,7 +2025,6 @@ const RutinaGym: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Metadata compacta */}
                         <div className="flex flex-wrap gap-3 text-xs text-slate-700">
                           <span className="font-bold">{ej.series}s</span>
                           <span className="font-mono">{ej.reps}r</span>
@@ -2025,12 +2036,11 @@ const RutinaGym: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Preview última sesión */}
                         {previousSession?.exercises[ej.id!] && (
                           <div className="text-[10px] text-slate-500 mt-1">
                             ← Prev:{" "}
                             {previousSession.exercises[ej.id!].sets
-                              .slice(0, 2) // Solo mostrar primeros 2 sets para preview
+                              .slice(0, 2)
                               .map((s) => `${s.peso}×${s.reps}`)
                               .join(" ")}
                             {previousSession.exercises[ej.id!].sets.length >
@@ -2040,7 +2050,6 @@ const RutinaGym: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Botón expandir/contraer */}
                     <button
                       onClick={() =>
                         setExpandedExercise(isExpanded ? null : ej.id!)
@@ -2054,10 +2063,8 @@ const RutinaGym: React.FC = () => {
                   </div>
                 </div>
 
-                {/* CONTENIDO EXPANDIDO */}
                 {isExpanded && (
                   <div className="px-4 pb-4 border-t border-white/20 pt-4 space-y-4">
-                    {/* Controles de series - MANTENIENDO MISMA FUNCIONALIDAD */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-slate-700 text-sm">
@@ -2078,17 +2085,18 @@ const RutinaGym: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                      {/* Lista de series - LAYOUT FIJO PARA iOS */}
                       <div className="space-y-2">
                         {sets.map((s, sidx) => {
                           const [rirMin, rirMax] = parseRIR(s.rir);
                           return (
-                            <div className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2">
+                            <div
+                              key={sidx}
+                              className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2"
+                            >
                               <span className="text-xs font-semibold text-slate-700 w-6">
                                 {sidx + 1}.
                               </span>
 
-                              {/* MEJORA 3: Inputs con navegación por Enter */}
                               <input
                                 {...createInputProps(ej.id!, sidx, "reps")}
                                 type="number"
@@ -2170,7 +2178,6 @@ const RutinaGym: React.FC = () => {
                           );
                         })}
                       </div>
-                      {/* Botones de acción */}
                       <div className="flex flex-wrap gap-2 justify-center pt-2">
                         <button
                           onClick={() => clearEmptySets(ej.id, ej.series)}
@@ -2200,7 +2207,6 @@ const RutinaGym: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Notas del ejercicio - MANTENIENDO FUNCIONALIDAD */}
                     <div className="pt-2 border-t border-white/20">
                       <textarea
                         value={getExerciseNote(ej.id)}
@@ -2211,7 +2217,6 @@ const RutinaGym: React.FC = () => {
                       />
                     </div>
 
-                    {/* Controles de movimiento/eliminación */}
                     <div className="flex gap-2 justify-center pt-2">
                       <button
                         onClick={() => moveExercise(selectedDay, ej.id!, "up")}
@@ -2247,7 +2252,6 @@ const RutinaGym: React.FC = () => {
           })}
         </div>
 
-        {/* Abdominales - compacto */}
         <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700 print:bg-white mx-2">
           <h3 className="text-sm font-bold text-white mb-2 print:text-slate-900">
             🔥 Abdominales (opcional)
@@ -2269,7 +2273,6 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
 
-        {/* Notas técnicas - colapsable */}
         <details className="bg-slate-800 rounded-lg p-3 border border-slate-700 print:bg-white mx-2">
           <summary className="text-sm font-bold text-white cursor-pointer print:text-slate-900">
             📋 Notas Técnicas (click para expandir)
@@ -2314,18 +2317,15 @@ const RutinaGym: React.FC = () => {
           </div>
         </details>
 
-        {/* Footer compacto */}
         <div className="text-center text-slate-400 text-[10px] mt-3 print:text-slate-700 px-2">
           <p>83kg | 1.75m | 23 años | Hipertrofia + Estética</p>
         </div>
 
-        {/* Barra inferior discreta - Solo aparece cuando se necesita */}
         <div
           className={`fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-700 safe-area-bottom z-40 transition-all duration-300 translate-y-0`}
         >
           <div className="p-2">
             <div className="flex items-center justify-between gap-1">
-              {/* Acción principal: FINALIZAR */}
               <button
                 onClick={finalizarSesion}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold text-xs transition-all active:scale-95"
@@ -2333,7 +2333,6 @@ const RutinaGym: React.FC = () => {
                 ✓ FINALIZAR
               </button>
 
-              {/* Acciones secundarias compactas */}
               <button
                 onClick={() =>
                   setSelectorOpen({ open: true, mode: "add", grupo: undefined })
@@ -2377,7 +2376,6 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
 
-        {/* Espacio reducido para la barra */}
         <div className="h-16"></div>
       </div>
 
@@ -2389,7 +2387,6 @@ const RutinaGym: React.FC = () => {
               boxShadow: "0 -20px 60px rgba(0,0,0,0.5)",
             }}
           >
-            {/* Header del modal */}
             <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-bold text-lg">
@@ -2403,13 +2400,11 @@ const RutinaGym: React.FC = () => {
                 </button>
               </div>
 
-              {/* Barra de agarre (solo en móvil) */}
               <div className="flex justify-center mt-2 md:hidden">
                 <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
               </div>
             </div>
 
-            {/* Búsqueda */}
             <div className="p-4 border-b border-slate-700">
               <input
                 ref={searchInputRef}
@@ -2420,7 +2415,6 @@ const RutinaGym: React.FC = () => {
               />
             </div>
 
-            {/* Lista de ejercicios */}
             <div className="flex-1 overflow-y-auto">
               {suggestions.length === 0 ? (
                 <div className="p-8 text-center text-slate-400">
@@ -2430,7 +2424,7 @@ const RutinaGym: React.FC = () => {
                 <div className="p-2 space-y-2">
                   {suggestions.map((sug) => (
                     <button
-                      key={sug.id}
+                      key={sug.id || sug.nombre}
                       onClick={() => handleSelectSuggestion(sug)}
                       className="w-full text-left p-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 transition-all"
                     >
@@ -2463,7 +2457,6 @@ const RutinaGym: React.FC = () => {
               )}
             </div>
 
-            {/* Footer del modal */}
             <div className="p-4 border-t border-slate-700 sticky bottom-0 bg-slate-900">
               <button
                 onClick={() => setSelectorOpen({ open: false })}
@@ -2475,7 +2468,7 @@ const RutinaGym: React.FC = () => {
           </div>
         </div>
       )}
-      {/* Modal 1RM (Epley) */}
+
       {oneRMModal.open && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 safe-area-top safe-area-bottom"
@@ -2587,14 +2580,12 @@ const RutinaGym: React.FC = () => {
       )}
 
       <style>{`
-      /* Asegurar que no hay márgenes/paddings no deseados */
       body {
         margin: 0;
         padding: 0;
         background-color: #0f172a;
       }
       
-      /* Eliminar cualquier borde blanco en iOS */
       @supports (padding-top: env(safe-area-inset-top)) {
         body {
           padding-top: env(safe-area-inset-top);
@@ -2604,7 +2595,6 @@ const RutinaGym: React.FC = () => {
         }
       }
       
-      /* Asegurar que el color de fondo cubra todo */
       html, body, #root {
         background-color: #0f172a;
         margin: 0;
@@ -2618,7 +2608,6 @@ const RutinaGym: React.FC = () => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   
-  /* MEJORA 3: Safe areas para iOS */
   .safe-area-top {
     padding-top: max(12px, env(safe-area-inset-top));
   }
@@ -2627,7 +2616,6 @@ const RutinaGym: React.FC = () => {
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 
-  /* Mejorar scroll en móvil */
   @media (max-width: 768px) {
     .overflow-x-auto {
       -webkit-overflow-scrolling: touch;
@@ -2655,7 +2643,7 @@ const RutinaGym: React.FC = () => {
   html {
     scroll-behavior: smooth;
   }
-  /* Mejoras para modales móviles */
+
 @media (max-width: 768px) {
   .modal-bottom-sheet {
     animation: slideUp 0.3s ease-out;
@@ -2667,24 +2655,21 @@ const RutinaGym: React.FC = () => {
   }
 }
 
-/* Scroll suave en modales */
 .modal-content {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Mejorar botones para touch */
 button {
   min-height: 44px;
   min-width: 44px;
 }
 
-/* Evitar zoom en inputs en iOS */
 @media (max-width: 768px) {
   input, textarea {
     font-size: 16px;
   }
 }
-/* Garantizar que inputs no se salgan en iOS */
+
 @media (max-width: 768px) {
   .grid-cols-\\[auto_1fr_1fr_auto\\] {
     grid-template-columns: auto 1fr 1fr auto;
@@ -2697,7 +2682,6 @@ button {
   );
 };
 
-// === Calculadora Epley para 1RM ===
 const computeEpley = (weightStr?: string, repsStr?: string) => {
   const weight = parseFloat((weightStr ?? "").toString().replace(",", "."));
   const reps = parseInt((repsStr ?? "").toString(), 10);
@@ -2711,7 +2695,6 @@ const computeEpley = (weightStr?: string, repsStr?: string) => {
     return null;
   }
 
-  // Fórmula Epley: 1RM = peso × (1 + reps/30)
   const oneRM = weight * (1 + reps / 30);
 
   return {
