@@ -404,6 +404,7 @@ const ejerciciosPorGrupo = (grupo: Grupo): Ejercicio[] => {
 
 // Helper para buscar ejercicios por nombre (búsqueda flexible)
 const buscarEjercicios = (termino: string): Ejercicio[] => {
+  if (!termino || termino.length < 2) return [];
   const lowerTermino = termino.toLowerCase();
   return ejerciciosDB.filter(
     (ej) =>
@@ -784,7 +785,11 @@ const dias: Array<keyof typeof rutina> = [
 
 const seriesToRange = (s: Series): [number, number] => {
   if (typeof s === "number") return [s, s];
-  const [a, b] = s.split("-").map((n) => parseInt(n.trim(), 10));
+  const str = String(s || "");
+  const matches = str.match(/\d+/g);
+  if (!matches || matches.length === 0) return [0, 0];
+  const a = parseInt(matches[0], 10) || 0;
+  const b = matches.length > 1 ? parseInt(matches[1], 10) || a : a;
   return [a, b];
 };
 
@@ -792,6 +797,29 @@ const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
   ...d,
   ejercicios: d.ejercicios.map((e, i) => ({ ...e, id: `${prefix}-E${i + 1}` })),
 });
+
+// Ensure rutina structure has stable exercise ids and sensible defaults
+const normalizeRutina = (maybeRutina: any): typeof rutina => {
+  const out: any = {};
+  dias.forEach((d) => {
+    const src = maybeRutina && maybeRutina[d] ? maybeRutina[d] : rutina[d];
+    const ejercicios = Array.isArray(src.ejercicios) ? src.ejercicios : [];
+    const seen = new Set<string>();
+    out[d] = {
+      ...src,
+      ejercicios: ejercicios.map((e: Ejercicio, i: number) => {
+        if (e && typeof e.id === "string" && e.id.trim().length > 0 && !seen.has(e.id)) {
+          seen.add(e.id);
+          return { ...e };
+        }
+        const gen = `${d}-E${i + 1}`;
+        seen.add(gen);
+        return { ...e, id: gen };
+      }),
+    };
+  });
+  return out as typeof rutina;
+};
 
 // =======================
 // Componente
@@ -819,9 +847,13 @@ const RutinaGym: React.FC = () => {
       }
     >
   >({});
-  const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(
-    (localStorage.getItem("rg-selectedDay") as keyof typeof rutina) || "lunes"
-  );
+  const [selectedDay, setSelectedDay] = useState<keyof typeof rutina>(() => {
+    const raw = localStorage.getItem("rg-selectedDay");
+    if (raw && (dias as string[]).includes(raw)) {
+      return raw as keyof typeof rutina;
+    }
+    return "lunes";
+  });
   const [showHistory, setShowHistory] = useState(false);
   const sessionStartTimeRef = useRef(Date.now());
   const [showLegend, setShowLegend] = useState(false);
@@ -842,6 +874,7 @@ const RutinaGym: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [oneRMModal, setOneRMModal] = useState<{
     open: boolean;
     exerciseId?: string;
@@ -850,6 +883,8 @@ const RutinaGym: React.FC = () => {
   }>({ open: false });
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [rutinaState, setRutinaState] = useState<typeof rutina | null>(null);
+  // small ref counter so multiple independent loads don't race to set loading=false
+  const pendingLoadsRef = useRef<number>(2);
 
   // useEffect para el timer
   useEffect(() => {
@@ -900,9 +935,10 @@ const RutinaGym: React.FC = () => {
           setExerciseNotes(loadedNotes);
         }
       } catch (error) {
-        console.error("Error o timeout loading data:", error);
+        console.error("Error o timeout loading datos:", error);
       } finally {
-        setIsLoading(false);
+        pendingLoadsRef.current = Math.max(0, pendingLoadsRef.current - 1);
+        if (pendingLoadsRef.current <= 0) setIsLoading(false);
       }
     };
 
@@ -924,24 +960,25 @@ const RutinaGym: React.FC = () => {
 
         if (stored) {
           console.log("📥 Rutina cargada desde DB:", stored);
-          setRutinaState(stored);
+          setRutinaState(normalizeRutina(stored));
         } else {
           console.log("📝 Inicializando rutina por defecto");
           setRutinaState(
-            Object.fromEntries(
-              dias.map((d) => [d, withIds(rutina[d], d)])
-            ) as typeof rutina
+            normalizeRutina(
+              Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)]))
+            )
           );
         }
       } catch (err) {
         console.error("Error o timeout cargando rutina:", err);
         setRutinaState(
-          Object.fromEntries(
-            dias.map((d) => [d, withIds(rutina[d], d)])
-          ) as typeof rutina
+          normalizeRutina(
+            Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)]))
+          )
         );
       } finally {
-        setIsLoading(false);
+        pendingLoadsRef.current = Math.max(0, pendingLoadsRef.current - 1);
+        if (pendingLoadsRef.current <= 0) setIsLoading(false);
       }
     };
     loadRutina();
@@ -995,22 +1032,40 @@ const RutinaGym: React.FC = () => {
     }
   }, [selectorOpen]);
 
-  // Actualizar sugerencias cuando cambia búsqueda
+  // Actualizar sugerencias cuando cambia búsqueda (con debounce)
   useEffect(() => {
     if (!selectorOpen.open) return;
+    
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
     const term = (searchTerm || "").trim();
-    let results: Ejercicio[] = [];
+    
+    // If empty, show default group suggestions immediately
     if (term === "") {
-      results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
-    } else {
-      results = buscarEjercicios(term);
+      const results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
+      setSuggestions(results.slice(0, 12));
+      return;
     }
-    if (selectorOpen.grupo) {
-      results = results.sort((a, b) =>
-        a.grupo === selectorOpen.grupo ? -1 : 1
-      );
-    }
-    setSuggestions(results.slice(0, 12));
+    
+    // Debounce search for typed queries (200ms delay)
+    debounceTimerRef.current = setTimeout(() => {
+      let results = buscarEjercicios(term);
+      if (selectorOpen.grupo) {
+        results = results.sort((a, b) =>
+          a.grupo === selectorOpen.grupo ? -1 : 1
+        );
+      }
+      setSuggestions(results.slice(0, 12));
+    }, 200);
+    
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [searchTerm, selectorOpen]);
 
   // Pre-cargar valores de última sesión
@@ -2406,13 +2461,29 @@ const RutinaGym: React.FC = () => {
             </div>
 
             <div className="p-4 border-b border-slate-700">
-              <input
-                ref={searchInputRef}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="🔍 Buscar ejercicio..."
-                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-400 text-base"
-              />
+              <div className="relative">
+                <input
+                  ref={searchInputRef}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="🔍 Buscar ejercicio (mín. 2 caracteres)..."
+                  className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-400 text-base focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  autoComplete="off"
+                  type="text"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm("");
+                      searchInputRef.current?.focus();
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
