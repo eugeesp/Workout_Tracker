@@ -1,4 +1,4 @@
-import { Ejercicio, Grupo } from "../types";
+import { Ejercicio } from "../types";
 
 export const ejerciciosDB: Ejercicio[] = [
   // === ACTIVACIÓN ===
@@ -288,10 +288,6 @@ export const ejerciciosDB: Ejercicio[] = [
     tempo: "1-0-3-1",
   },
 ];
-
-export const ejerciciosPorGrupo = (grupo: Grupo): Ejercicio[] => {
-  return ejerciciosDB.filter((ej) => ej.grupo === grupo);
-};
 
 export const buscarEjercicios = (termino: string): Ejercicio[] => {
   if (!termino || termino.length < 2) return [];

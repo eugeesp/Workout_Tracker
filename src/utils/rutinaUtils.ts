@@ -1,15 +1,5 @@
 import { dias, rutina } from "../data/rutina";
-import { DiaRutina, Series } from "../types";
-
-export const seriesToRange = (s: Series): [number, number] => {
-  if (typeof s === "number") return [s, s];
-  const str = String(s || "");
-  const matches = str.match(/\d+/g);
-  if (!matches || matches.length === 0) return [0, 0];
-  const a = parseInt(matches[0], 10) || 0;
-  const b = matches.length > 1 ? parseInt(matches[1], 10) || a : a;
-  return [a, b];
-};
+import { DiaRutina } from "../types";
 
 export const withIds = (d: DiaRutina, prefix: string): DiaRutina => ({
   ...d,
@@ -36,10 +26,4 @@ export const normalizeRutina = (maybeRutina: unknown): typeof rutina => {
     };
   });
   return out as typeof rutina;
-};
-
-export const minSeriesFrom = (series: Series): number => {
-  if (typeof series === "number") return series;
-  const [min] = seriesToRange(series);
-  return min;
 };
