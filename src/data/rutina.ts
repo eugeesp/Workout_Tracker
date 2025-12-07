@@ -1,45 +1,40 @@
-
 import { DiaRutina, Ejercicio, Grupo } from "../types";
 
-export const colorLegend: Record<Grupo, { bg: string; border: string; text: string }> =
-  {
-    pecho: { bg: "bg-red-100", border: "border-red-300", text: "text-red-900" },
-    espalda: {
-      bg: "bg-green-100",
-      border: "border-green-300",
-      text: "text-green-900",
-    },
-    biceps: {
-      bg: "bg-blue-100",
-      border: "border-blue-300",
-      text: "text-blue-900",
-    },
-    triceps: {
-      bg: "bg-purple-100",
-      border: "border-purple-300",
-      text: "text-purple-900",
-    },
-    hombro: {
-      bg: "bg-orange-100",
-      border: "border-orange-300",
-      text: "text-orange-900",
-    },
-    pierna: {
-      bg: "bg-yellow-100",
-      border: "border-yellow-300",
-      text: "text-yellow-900",
-    },
-    activacion: {
-      bg: "bg-gray-100",
-      border: "border-gray-300",
-      text: "text-gray-900",
-    },
-  };
+export const colorLegend: Record<Grupo, { bg: string; border: string; text: string }> = {
+  pecho: { bg: "bg-red-100", border: "border-red-300", text: "text-red-900" },
+  espalda: {
+    bg: "bg-green-100",
+    border: "border-green-300",
+    text: "text-green-900",
+  },
+  biceps: {
+    bg: "bg-blue-100",
+    border: "border-blue-300",
+    text: "text-blue-900",
+  },
+  triceps: {
+    bg: "bg-purple-100",
+    border: "border-purple-300",
+    text: "text-purple-900",
+  },
+  hombro: {
+    bg: "bg-orange-100",
+    border: "border-orange-300",
+    text: "text-orange-900",
+  },
+  pierna: {
+    bg: "bg-yellow-100",
+    border: "border-yellow-300",
+    text: "text-yellow-900",
+  },
+  activacion: {
+    bg: "bg-gray-100",
+    border: "border-gray-300",
+    text: "text-gray-900",
+  },
+};
 
-export const rutina: Record<
-  "lunes" | "martes" | "miercoles" | "jueves" | "viernes",
-  DiaRutina
-> = {
+export const rutina: Record<"lunes" | "martes" | "miercoles" | "jueves" | "viernes", DiaRutina> = {
   lunes: {
     nombre: "LUNES - Pecho / Bíceps / Posterior 💪",
     ejercicios: [

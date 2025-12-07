@@ -1,11 +1,4 @@
-export type Grupo =
-  | "pecho"
-  | "espalda"
-  | "biceps"
-  | "triceps"
-  | "hombro"
-  | "pierna"
-  | "activacion";
+export type Grupo = "pecho" | "espalda" | "biceps" | "triceps" | "hombro" | "pierna" | "activacion";
 
 export type Series = number | `${number}-${number}`;
 

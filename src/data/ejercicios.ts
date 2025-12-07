@@ -1,4 +1,3 @@
-
 import { Ejercicio, Grupo } from "../types";
 
 export const ejerciciosDB: Ejercicio[] = [
@@ -289,8 +288,6 @@ export const ejerciciosDB: Ejercicio[] = [
     tempo: "1-0-3-1",
   },
 ];
-
-
 
 export const ejerciciosPorGrupo = (grupo: Grupo): Ejercicio[] => {
   return ejerciciosDB.filter((ej) => ej.grupo === grupo);

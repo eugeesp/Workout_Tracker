@@ -42,9 +42,7 @@ const RutinaGym: React.FC = () => {
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<string>("");
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(
-    {}
-  );
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [selectorOpen, setSelectorOpen] = useState<{
     open: boolean;
     targetId?: string;
@@ -133,10 +131,7 @@ const RutinaGym: React.FC = () => {
           setTimeout(() => reject(new Error("Timeout cargando rutina")), 3000)
         );
 
-        const stored = await Promise.race([
-          getFromDB(STORAGE_RUTINA),
-          timeoutPromise,
-        ]);
+        const stored = await Promise.race([getFromDB(STORAGE_RUTINA), timeoutPromise]);
 
         if (stored) {
           console.log("📥 Rutina cargada desde DB:", stored);
@@ -144,17 +139,13 @@ const RutinaGym: React.FC = () => {
         } else {
           console.log("📝 Inicializando rutina por defecto");
           setRutinaState(
-            normalizeRutina(
-              Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)]))
-            )
+            normalizeRutina(Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)])))
           );
         }
       } catch (err) {
         console.error("Error o timeout cargando rutina:", err);
         setRutinaState(
-          normalizeRutina(
-            Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)]))
-          )
+          normalizeRutina(Object.fromEntries(dias.map((d) => [d, withIds(rutina[d], d)])))
         );
       } finally {
         pendingLoadsRef.current = Math.max(0, pendingLoadsRef.current - 1);
@@ -202,9 +193,7 @@ const RutinaGym: React.FC = () => {
     if (selectorOpen.open) {
       setTimeout(() => searchInputRef.current?.focus(), 60);
       setSearchTerm("");
-      const byGroup = ejerciciosDB.filter(
-        (ej) => ej.grupo === selectorOpen.grupo
-      );
+      const byGroup = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
       setSuggestions(byGroup.slice(0, 8));
     } else {
       setSuggestions([]);
@@ -215,32 +204,30 @@ const RutinaGym: React.FC = () => {
   // Actualizar sugerencias cuando cambia búsqueda (con debounce)
   useEffect(() => {
     if (!selectorOpen.open) return;
-    
+
     // Clear previous timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
-    
+
     const term = (searchTerm || "").trim();
-    
+
     // If empty, show default group suggestions immediately
     if (term === "") {
       const results = ejerciciosDB.filter((ej) => ej.grupo === selectorOpen.grupo);
       setSuggestions(results.slice(0, 12));
       return;
     }
-    
+
     // Debounce search for typed queries (200ms delay)
     debounceTimerRef.current = setTimeout(() => {
       let results = buscarEjercicios(term);
       if (selectorOpen.grupo) {
-        results = results.sort((a, b) =>
-          a.grupo === selectorOpen.grupo ? -1 : 1
-        );
+        results = results.sort((a, b) => (a.grupo === selectorOpen.grupo ? -1 : 1));
       }
       setSuggestions(results.slice(0, 12));
     }, 200);
-    
+
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -254,9 +241,7 @@ const RutinaGym: React.FC = () => {
 
     const lastSession = history
       .filter((s) => s.day === selectedDay)
-      .sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )[0];
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
     if (lastSession && Object.keys(logs).length === 0) {
       const migrated = Object.fromEntries(
@@ -275,9 +260,7 @@ const RutinaGym: React.FC = () => {
   const previousSession = useMemo(() => {
     return history
       .filter((s) => s.day === selectedDay)
-      .sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )[0];
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
   }, [history, selectedDay]);
 
   const volumenSemanal = useMemo(() => {
@@ -310,10 +293,7 @@ const RutinaGym: React.FC = () => {
 
   const day = rutinaState[selectedDay];
 
-  const elapsedMin = Math.max(
-    0,
-    Math.round((Date.now() - sessionStartTimeRef.current) / 60000)
-  );
+  const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTimeRef.current) / 60000));
 
   const parseNumber = (v?: string) => {
     const n = parseFloat((v ?? "").toString().replace(",", "."));
@@ -469,9 +449,7 @@ const RutinaGym: React.FC = () => {
       const copy = { ...prev };
       copy[day] = {
         ...copy[day],
-        ejercicios: copy[day].ejercicios.map((ej) =>
-          ej.id === ejId ? { ...ej, ...patch } : ej
-        ),
+        ejercicios: copy[day].ejercicios.map((ej) => (ej.id === ejId ? { ...ej, ...patch } : ej)),
       };
       return copy;
     });
@@ -517,11 +495,7 @@ const RutinaGym: React.FC = () => {
     });
   };
 
-  const moveExercise = (
-    day: keyof typeof rutinaState,
-    ejId: string,
-    dir: "up" | "down"
-  ) => {
+  const moveExercise = (day: keyof typeof rutinaState, ejId: string, dir: "up" | "down") => {
     setRutinaState((prev) => {
       if (!prev) return prev;
       const copy = { ...prev };
@@ -566,8 +540,7 @@ const RutinaGym: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    let csv =
-      "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,RPE,TEMPO,NOTAS,GRUPO MUSCULAR\n";
+    let csv = "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,RPE,TEMPO,NOTAS,GRUPO MUSCULAR\n";
 
     dias.forEach((dia) => {
       const data = rutinaState[dia];
@@ -575,9 +548,7 @@ const RutinaGym: React.FC = () => {
       data.ejercicios.forEach((ej) => {
         csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${
           ej.series
-        },${ej.reps},${ej.rpe},${ej.tempo || "-"},${ej.nota || "-"},${
-          ej.grupo
-        }\n`;
+        },${ej.reps},${ej.rpe},${ej.tempo || "-"},${ej.nota || "-"},${ej.grupo}\n`;
       });
     });
 
@@ -615,9 +586,7 @@ const RutinaGym: React.FC = () => {
     const k = `${selectedDay}:${exerciseId ?? ""}`;
     const filled = (logs[k]?.sets ?? []).filter(
       (s: any) =>
-        !!s &&
-        (s.peso ?? "").toString().trim() !== "" &&
-        (s.reps ?? "").toString().trim() !== ""
+        !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== ""
     );
     const last =
       filled.length > 0
@@ -652,9 +621,7 @@ const RutinaGym: React.FC = () => {
       const rirsList = sets.map((s) => asRIR(s.rir)).join(",");
       const nota = sanitizeTSV(getExerciseNote(ej.id) || entry?.notes || "");
 
-      tsv += `\t${sanitizeTSV(
-        displayName(ej)
-      )}\t'${repsList}\t'${rirsList}\t\t${nota}\n`;
+      tsv += `\t${sanitizeTSV(displayName(ej))}\t'${repsList}\t'${rirsList}\t\t${nota}\n`;
     });
 
     return tsv;
@@ -670,9 +637,7 @@ const RutinaGym: React.FC = () => {
     day.ejercicios.forEach((ej, i) => {
       const idx = i + 1;
       lines.push(`${idx}. ${ej.nombre}`);
-      lines.push(
-        `   Series: ${ej.series} | Reps objetivo: ${ej.reps} | RPE: ${ej.rpe}`
-      );
+      lines.push(`   Series: ${ej.series} | Reps objetivo: ${ej.reps} | RPE: ${ej.rpe}`);
       if (ej.tempo) lines.push(`   Tempo: ${ej.tempo}`);
       if (ej.nota) lines.push(`   💡 ${ej.nota}`);
 
@@ -693,9 +658,7 @@ const RutinaGym: React.FC = () => {
     });
 
     lines.push("📈 Resumen del día:");
-    lines.push(
-      `   Ejercicios completados: ${completedCount}/${day.ejercicios.length}`
-    );
+    lines.push(`   Ejercicios completados: ${completedCount}/${day.ejercicios.length}`);
     lines.push(`   Volumen total: ${currentVolume} kg`);
     lines.push("");
     lines.push("📝 Notas del entrenamiento:");
@@ -724,8 +687,7 @@ const RutinaGym: React.FC = () => {
 
   const keyFor = (id?: string) => `${selectedDay}:${id ?? ""}`;
   const isDone = (id?: string) => !!done[keyFor(id)];
-  const toggleDone = (id?: string) =>
-    setDone((d) => ({ ...d, [keyFor(id)]: !isDone(id) }));
+  const toggleDone = (id?: string) => setDone((d) => ({ ...d, [keyFor(id)]: !isDone(id) }));
 
   const resetDay = () => {
     console.log("🧹 Limpiando día:", selectedDay);
@@ -792,9 +754,7 @@ const RutinaGym: React.FC = () => {
       });
     });
 
-    const duration = Math.round(
-      (Date.now() - sessionStartTimeRef.current) / 60000
-    );
+    const duration = Math.round((Date.now() - sessionStartTimeRef.current) / 60000);
     const bodyWeightNum = parseFloat(bodyWeight || "0");
 
     const newSession: WorkoutSession = {
@@ -898,9 +858,7 @@ const RutinaGym: React.FC = () => {
   };
 
   const isFilled = (s?: { peso?: string; reps?: string }) =>
-    !!s &&
-    (s.peso ?? "").toString().trim() !== "" &&
-    (s.reps ?? "").toString().trim() !== "";
+    !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== "";
 
   const filledSets = (id: string | undefined, series: Series) =>
     getSets(id, series).filter(isFilled);
@@ -909,10 +867,7 @@ const RutinaGym: React.FC = () => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    const last =
-      current.length > 0
-        ? current[current.length - 1]
-        : { peso: "", reps: "", rir: "" };
+    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "", rir: "" };
     current.push({
       peso: last.peso ?? "",
       reps: last.reps ?? "",
@@ -949,10 +904,7 @@ const RutinaGym: React.FC = () => {
     return alt && alt.trim() ? alt.trim() : ej.nombre;
   };
 
-  const completedCount = day.ejercicios.reduce(
-    (acc, e) => acc + (isDone(e.id) ? 1 : 0),
-    0
-  );
+  const completedCount = day.ejercicios.reduce((acc, e) => acc + (isDone(e.id) ? 1 : 0), 0);
 
   const currentVolume = (() => {
     let total = 0;
@@ -1003,16 +955,11 @@ const RutinaGym: React.FC = () => {
               </button>
 
               <div className="flex-1 text-center mx-2">
-                <h1 className="text-white font-bold text-lg capitalize">
-                  {selectedDay}
-                </h1>
+                <h1 className="text-white font-bold text-lg capitalize">{selectedDay}</h1>
                 <div className="text-slate-300 text-sm mt-1">
                   {day.nombre.split(" - ")[1] ||
                     day.nombre.replace(
-                      `${
-                        selectedDay.charAt(0).toUpperCase() +
-                        selectedDay.slice(1)
-                      } - `,
+                      `${selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1)} - `,
                       ""
                     )}
                 </div>
@@ -1021,9 +968,7 @@ const RutinaGym: React.FC = () => {
                     <div
                       key={dia}
                       className={`w-1.5 h-1.5 rounded-full transition-all ${
-                        selectedDay === dia
-                          ? "bg-white scale-125"
-                          : "bg-slate-600"
+                        selectedDay === dia ? "bg-white scale-125" : "bg-slate-600"
                       }`}
                     />
                   ))}
@@ -1047,9 +992,7 @@ const RutinaGym: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-1 bg-blue-800/80 rounded-full px-2 py-1">
-                  <span className="text-white font-semibold">
-                    {currentVolume} kg
-                  </span>
+                  <span className="text-white font-semibold">{currentVolume} kg</span>
                 </div>
                 <div className="flex items-center gap-1 bg-slate-800 rounded-full px-2 py-1">
                   <span className="text-slate-300">{elapsedMin}m</span>
@@ -1059,9 +1002,7 @@ const RutinaGym: React.FC = () => {
               <div className="flex items-center gap-1">
                 <div className="relative">
                   <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-slate-600">
-                    <span className="text-white font-semibold text-sm">
-                      Peso
-                    </span>
+                    <span className="text-white font-semibold text-sm">Peso</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -1070,9 +1011,7 @@ const RutinaGym: React.FC = () => {
                       placeholder="kg"
                       className="w-16 text-center bg-slate-700 text-white font-bold border-0 rounded text-sm py-1"
                     />
-                    {bodyWeight && (
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    )}
+                    {bodyWeight && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
                   </div>
                 </div>
 
@@ -1125,86 +1064,61 @@ const RutinaGym: React.FC = () => {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <h4 className="text-white font-semibold capitalize">
-                              {session.day} -{" "}
-                              {new Date(session.date).toLocaleDateString(
-                                "es-AR"
-                              )}
+                              {session.day} - {new Date(session.date).toLocaleDateString("es-AR")}
                             </h4>
                             <div className="flex gap-3 mt-1 text-sm text-slate-300 flex-wrap">
                               <span>💪 {session.totalVolume} kg</span>
-                              {session.duration && (
-                                <span>⏱️ {session.duration} min</span>
-                              )}
-                              {session.bodyWeight && (
-                                <span>⚖️ {session.bodyWeight} kg</span>
-                              )}
+                              {session.duration && <span>⏱️ {session.duration} min</span>}
+                              {session.bodyWeight && <span>⚖️ {session.bodyWeight} kg</span>}
                             </div>
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          {Object.entries(session.exercises).map(
-                            ([exId, exData]) => {
-                              const dayRutina =
-                                rutinaState[
-                                  session.day as keyof typeof rutinaState
-                                ];
+                          {Object.entries(session.exercises).map(([exId, exData]) => {
+                            const dayRutina = rutinaState[session.day as keyof typeof rutinaState];
 
-                              // Si por alguna razón esta sesión tiene un "day" que ya no existe en la rutina actual,
-                              // nos salteamos ese ejercicio para no romper todo.
-                              if (!dayRutina) {
-                                console.warn(
-                                  "Sesión con día desconocido en history:",
-                                  session.day
-                                );
-                                return null;
-                              }
-
-                              const originalEx = dayRutina.ejercicios.find(
-                                (e) => e.id === exId
-                              );
-                              if (!originalEx) return null;
-
-                              return (
-                                <div
-                                  key={exId}
-                                  className={`p-2 rounded-lg ${
-                                    exData.completed
-                                      ? "bg-slate-700"
-                                      : "bg-slate-700/50"
-                                  }`}
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <span
-                                        className={
-                                          exData.completed
-                                            ? "text-white"
-                                            : "text-slate-400"
-                                        }
-                                      >
-                                        {exData.completed ? "✅" : "○"}{" "}
-                                        {exData.alt || originalEx.nombre}
-                                      </span>
-                                      <div className="text-slate-300 text-xs mt-1 font-mono">
-                                        {exData.sets.map((s, i) => (
-                                          <span key={i} className="mr-2">
-                                            {s.peso}×{s.reps}
-                                            {s.rir ? `(${s.rir})` : ""}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    {exData.notes && (
-                                      <span className="text-slate-400 text-xs italic">
-                                        📝
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
+                            // Si por alguna razón esta sesión tiene un "day" que ya no existe en la rutina actual,
+                            // nos salteamos ese ejercicio para no romper todo.
+                            if (!dayRutina) {
+                              console.warn("Sesión con día desconocido en history:", session.day);
+                              return null;
                             }
-                          )}
+
+                            const originalEx = dayRutina.ejercicios.find((e) => e.id === exId);
+                            if (!originalEx) return null;
+
+                            return (
+                              <div
+                                key={exId}
+                                className={`p-2 rounded-lg ${
+                                  exData.completed ? "bg-slate-700" : "bg-slate-700/50"
+                                }`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <span
+                                      className={exData.completed ? "text-white" : "text-slate-400"}
+                                    >
+                                      {exData.completed ? "✅" : "○"}{" "}
+                                      {exData.alt || originalEx.nombre}
+                                    </span>
+                                    <div className="text-slate-300 text-xs mt-1 font-mono">
+                                      {exData.sets.map((s, i) => (
+                                        <span key={i} className="mr-2">
+                                          {s.peso}×{s.reps}
+                                          {s.rir ? `(${s.rir})` : ""}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {exData.notes && (
+                                    <span className="text-slate-400 text-xs italic">📝</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -1228,9 +1142,7 @@ const RutinaGym: React.FC = () => {
                 key={ej.id}
                 className={`rounded-xl border-l-4 ${colors.border} ${
                   colors.bg
-                } transition-all duration-200 ${
-                  isExpanded ? "ring-2 ring-white/20" : ""
-                }`}
+                } transition-all duration-200 ${isExpanded ? "ring-2 ring-white/20" : ""}`}
               >
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -1272,17 +1184,14 @@ const RutinaGym: React.FC = () => {
                               .slice(0, 2)
                               .map((s) => `${s.peso}×${s.reps}`)
                               .join(" ")}
-                            {previousSession.exercises[ej.id!].sets.length >
-                              2 && "..."}
+                            {previousSession.exercises[ej.id!].sets.length > 2 && "..."}
                           </div>
                         )}
                       </div>
                     </div>
 
                     <button
-                      onClick={() =>
-                        setExpandedExercise(isExpanded ? null : ej.id!)
-                      }
+                      onClick={() => setExpandedExercise(isExpanded ? null : ej.id!)}
                       className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 transition-transform ${
                         isExpanded ? "rotate-180" : ""
                       }`}
@@ -1296,9 +1205,7 @@ const RutinaGym: React.FC = () => {
                   <div className="px-4 pb-4 border-t border-white/20 pt-4 space-y-4">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-slate-700 text-sm">
-                          Series realizadas:
-                        </h4>
+                        <h4 className="font-semibold text-slate-700 text-sm">Series realizadas:</h4>
                         <div className="flex gap-1">
                           <button
                             onClick={() => addSet(ej.id)}
@@ -1332,14 +1239,7 @@ const RutinaGym: React.FC = () => {
                                 inputMode="numeric"
                                 placeholder="Reps"
                                 value={s.reps ?? ""}
-                                onChange={(e) =>
-                                  setSetValue(
-                                    ej.id,
-                                    sidx,
-                                    "reps",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
                                 className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                               />
 
@@ -1349,14 +1249,7 @@ const RutinaGym: React.FC = () => {
                                 inputMode="decimal"
                                 placeholder="Kg"
                                 value={s.peso ?? ""}
-                                onChange={(e) =>
-                                  setSetValue(
-                                    ej.id,
-                                    sidx,
-                                    "peso",
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
                                 className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                               />
 
@@ -1368,18 +1261,11 @@ const RutinaGym: React.FC = () => {
                                   placeholder="RIR"
                                   value={rirMin ?? ""}
                                   onChange={(e) =>
-                                    setSetValue(
-                                      ej.id,
-                                      sidx,
-                                      "rirMin",
-                                      e.target.value
-                                    )
+                                    setSetValue(ej.id, sidx, "rirMin", e.target.value)
                                   }
                                   className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
-                                <span className="text-slate-600 text-xs">
-                                  -
-                                </span>
+                                <span className="text-slate-600 text-xs">-</span>
                                 <input
                                   {...createInputProps(ej.id!, sidx, "rirMax")}
                                   type="number"
@@ -1387,12 +1273,7 @@ const RutinaGym: React.FC = () => {
                                   placeholder="RIR"
                                   value={rirMax ?? ""}
                                   onChange={(e) =>
-                                    setSetValue(
-                                      ej.id,
-                                      sidx,
-                                      "rirMax",
-                                      e.target.value
-                                    )
+                                    setSetValue(ej.id, sidx, "rirMax", e.target.value)
                                   }
                                   className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
@@ -1455,9 +1336,7 @@ const RutinaGym: React.FC = () => {
                         ↑ Subir
                       </button>
                       <button
-                        onClick={() =>
-                          moveExercise(selectedDay, ej.id!, "down")
-                        }
+                        onClick={() => moveExercise(selectedDay, ej.id!, "down")}
                         className="px-3 py-1 text-xs bg-white/70 rounded border border-slate-400"
                         disabled={idx === day.ejercicios.length - 1}
                       >
@@ -1465,8 +1344,7 @@ const RutinaGym: React.FC = () => {
                       </button>
                       <button
                         onClick={() => {
-                          if (!confirm("¿Eliminar ejercicio de la rutina?"))
-                            return;
+                          if (!confirm("¿Eliminar ejercicio de la rutina?")) return;
                           removeExercise(selectedDay, ej.id!);
                         }}
                         className="px-3 py-1 text-xs bg-red-500 text-white rounded"
@@ -1512,36 +1390,25 @@ const RutinaGym: React.FC = () => {
                 Progresión de Reps
               </h4>
               <p>
-                8-10 / 9-11 / 10-12 = progresión semanal. Al completar semana 3,
-                subir peso y volver a 8-10.
+                8-10 / 9-11 / 10-12 = progresión semanal. Al completar semana 3, subir peso y volver
+                a 8-10.
               </p>
             </div>
             <div>
               <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
                 Back-off Sets
               </h4>
-              <p>
-                Reducir ~10% el peso en las series finales para mantener calidad
-                técnica.
-              </p>
+              <p>Reducir ~10% el peso en las series finales para mantener calidad técnica.</p>
             </div>
             <div>
               <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
                 Tempo (ej: 1-0-3-1)
               </h4>
-              <p>
-                1s excéntrico – 0s pausa abajo – 3s concéntrico – 1s pausa
-                arriba.
-              </p>
+              <p>1s excéntrico – 0s pausa abajo – 3s concéntrico – 1s pausa arriba.</p>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">
-                RPE
-              </h4>
-              <p>
-                Escala 1–10. RPE 7 ≈ 3 reps en recámara; RPE 8 ≈ 2 reps. Evitar
-                fallo.
-              </p>
+              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">RPE</h4>
+              <p>Escala 1–10. RPE 7 ≈ 3 reps en recámara; RPE 8 ≈ 2 reps. Evitar fallo.</p>
             </div>
           </div>
         </details>
@@ -1563,9 +1430,7 @@ const RutinaGym: React.FC = () => {
               </button>
 
               <button
-                onClick={() =>
-                  setSelectorOpen({ open: true, mode: "add", grupo: undefined })
-                }
+                onClick={() => setSelectorOpen({ open: true, mode: "add", grupo: undefined })}
                 className="w-10 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all"
                 title="Agregar ejercicio"
               >
@@ -1618,9 +1483,7 @@ const RutinaGym: React.FC = () => {
           >
             <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
               <div className="flex items-center justify-between">
-                <h3 className="text-white font-bold text-lg">
-                  💪 Seleccionar Ejercicio
-                </h3>
+                <h3 className="text-white font-bold text-lg">💪 Seleccionar Ejercicio</h3>
                 <button
                   onClick={() => setSelectorOpen({ open: false })}
                   className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white text-lg"
@@ -1662,9 +1525,7 @@ const RutinaGym: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto">
               {suggestions.length === 0 ? (
-                <div className="p-8 text-center text-slate-400">
-                  No se encontraron ejercicios
-                </div>
+                <div className="p-8 text-center text-slate-400">No se encontraron ejercicios</div>
               ) : (
                 <div className="p-2 space-y-2">
                   {suggestions.map((sug) => (
@@ -1675,17 +1536,13 @@ const RutinaGym: React.FC = () => {
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="font-semibold text-white text-sm mb-1">
-                            {sug.nombre}
-                          </div>
+                          <div className="font-semibold text-white text-sm mb-1">{sug.nombre}</div>
                           <div className="text-xs text-slate-300">
                             {sug.tempo ? `Tempo: ${sug.tempo} • ` : ""}
                             {sug.series} series • {sug.reps} reps
                           </div>
                           {sug.nota && (
-                            <div className="text-xs text-blue-300 mt-1">
-                              💡 {sug.nota}
-                            </div>
+                            <div className="text-xs text-blue-300 mt-1">💡 {sug.nota}</div>
                           )}
                         </div>
                         <div
@@ -1721,9 +1578,7 @@ const RutinaGym: React.FC = () => {
         >
           <div className="w-full max-w-md bg-slate-800 rounded-xl p-4 border border-slate-700">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-white font-bold text-sm">
-                🧮 Calculadora 1RM (Epley)
-              </h3>
+              <h3 className="text-white font-bold text-sm">🧮 Calculadora 1RM (Epley)</h3>
               <button
                 onClick={() => setOneRMModal({ open: false })}
                 className="text-slate-300 hover:text-white"
@@ -1748,26 +1603,19 @@ const RutinaGym: React.FC = () => {
                 placeholder="kg"
               />
 
-              <label className="text-slate-300 text-xs">
-                Repeticiones realizadas
-              </label>
+              <label className="text-slate-300 text-xs">Repeticiones realizadas</label>
               <input
                 type="number"
                 inputMode="numeric"
                 value={oneRMModal.currentReps ?? ""}
-                onChange={(e) =>
-                  setOneRMModal((s) => ({ ...s, currentReps: e.target.value }))
-                }
+                onChange={(e) => setOneRMModal((s) => ({ ...s, currentReps: e.target.value }))}
                 className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
                 placeholder="reps"
               />
 
               <div className="bg-slate-700 rounded p-3 text-center">
                 {(() => {
-                  const res = computeEpley(
-                    oneRMModal.currentWeight,
-                    oneRMModal.currentReps
-                  );
+                  const res = computeEpley(oneRMModal.currentWeight, oneRMModal.currentReps);
                   if (!res) {
                     return (
                       <div className="text-slate-300 text-sm">
@@ -1782,28 +1630,16 @@ const RutinaGym: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
                         <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          50% →{" "}
-                          <span className="font-semibold text-white">
-                            {res.p50} kg
-                          </span>
+                          50% → <span className="font-semibold text-white">{res.p50} kg</span>
                         </div>
                         <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          70% →{" "}
-                          <span className="font-semibold text-white">
-                            {res.p70} kg
-                          </span>
+                          70% → <span className="font-semibold text-white">{res.p70} kg</span>
                         </div>
                         <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          80% →{" "}
-                          <span className="font-semibold text-white">
-                            {res.p80} kg
-                          </span>
+                          80% → <span className="font-semibold text-white">{res.p80} kg</span>
                         </div>
                         <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          90% →{" "}
-                          <span className="font-semibold text-white">
-                            {res.p90} kg
-                          </span>
+                          90% → <span className="font-semibold text-white">{res.p90} kg</span>
                         </div>
                       </div>
                     </div>
@@ -1931,12 +1767,7 @@ const computeEpley = (weightStr?: string, repsStr?: string) => {
   const weight = parseFloat((weightStr ?? "").toString().replace(",", "."));
   const reps = parseInt((repsStr ?? "").toString(), 10);
 
-  if (
-    !Number.isFinite(weight) ||
-    !Number.isFinite(reps) ||
-    weight <= 0 ||
-    reps <= 0
-  ) {
+  if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) {
     return null;
   }
 
