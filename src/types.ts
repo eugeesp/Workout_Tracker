@@ -5,12 +5,9 @@ export type Series = number | `${number}-${number}`;
 export interface Ejercicio {
   id?: string;
   nombre: string;
+  grupo: Grupo;
   series: Series;
   reps: string;
-  rpe: string;
-  tempo?: string;
-  nota?: string;
-  grupo: Grupo;
 }
 
 export interface DiaRutina {
