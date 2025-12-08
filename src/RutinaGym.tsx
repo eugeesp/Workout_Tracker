@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { abdominales, colorLegend, dias, rutina } from "./data/rutina";
-import { buscarEjercicios, ejerciciosDB, ejerciciosPorGrupo } from "./data/ejercicios";
+import { buscarEjercicios, ejerciciosDB } from "./data/ejercicios";
 import { getFromDB, saveToDB } from "./storage/indexedDb";
-import { normalizeRutina, seriesToRange, withIds } from "./utils/rutinaUtils";
+import { normalizeRutina, withIds } from "./utils/rutinaUtils";
 import { Ejercicio, Grupo, Series, SessionExercise, WorkoutSession } from "./types";
 
 const STORAGE_HISTORY = "rg-history-v2" as const;
@@ -36,9 +36,7 @@ const RutinaGym: React.FC = () => {
   });
   const [showHistory, setShowHistory] = useState(false);
   const sessionStartTimeRef = useRef(Date.now());
-  const [showLegend, setShowLegend] = useState(false);
-  const [nowTick, setNowTick] = useState(0);
-  const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
+  const [, setNowTick] = useState(0);
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<string>("");
@@ -263,19 +261,6 @@ const RutinaGym: React.FC = () => {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
   }, [history, selectedDay]);
 
-  const volumenSemanal = useMemo(() => {
-    if (!rutinaState) return new Map<Grupo, { min: number; max: number }>();
-    const acc = new Map<Grupo, { min: number; max: number }>();
-    dias.forEach((d) => {
-      rutinaState[d].ejercicios.forEach((e) => {
-        const [minS, maxS] = seriesToRange(e.series);
-        const cur = acc.get(e.grupo) || { min: 0, max: 0 };
-        acc.set(e.grupo, { min: cur.min + minS, max: cur.max + maxS });
-      });
-    });
-    return acc;
-  }, [rutinaState]);
-
   // =======================
   // 3. AHORA SÍ el return temprano de loading
   // =======================
@@ -295,11 +280,6 @@ const RutinaGym: React.FC = () => {
 
   const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTimeRef.current) / 60000));
 
-  const parseNumber = (v?: string) => {
-    const n = parseFloat((v ?? "").toString().replace(",", "."));
-    return Number.isFinite(n) ? n : NaN;
-  };
-
   const parseRIR = (rirStr?: string): [number | null, number | null] => {
     if (!rirStr || !rirStr.trim()) return [null, null];
     const parts = rirStr
@@ -317,12 +297,6 @@ const RutinaGym: React.FC = () => {
     if (min === null || min === undefined) return "";
     if (max === null || max === undefined) return min.toString();
     return `${min}-${max}`;
-  };
-
-  const isValidRIR = (min?: number | null, max?: number | null): boolean => {
-    if (min === null || min === undefined) return false;
-    if (max === null || max === undefined) return true;
-    return max <= min;
   };
 
   const setExerciseNote = (exerciseId: string | undefined, note: string) => {
