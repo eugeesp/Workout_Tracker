@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { abdominales, colorLegend, dias, rutina } from "./data/rutina";
-import { buscarEjercicios, ejerciciosDB, ejerciciosPorGrupo } from "./data/ejercicios";
+import { buscarEjercicios, ejerciciosDB } from "./data/ejercicios";
 import { getFromDB, saveToDB } from "./storage/indexedDb";
-import { normalizeRutina, seriesToRange, withIds } from "./utils/rutinaUtils";
+import { normalizeRutina, withIds } from "./utils/rutinaUtils";
 import { Ejercicio, Grupo, Series, SessionExercise, WorkoutSession } from "./types";
 
 const STORAGE_HISTORY = "rg-history-v2" as const;
@@ -36,9 +36,7 @@ const RutinaGym: React.FC = () => {
   });
   const [showHistory, setShowHistory] = useState(false);
   const sessionStartTimeRef = useRef(Date.now());
-  const [showLegend, setShowLegend] = useState(false);
-  const [nowTick, setNowTick] = useState(0);
-  const [showVolumenSemanal, setShowVolumenSemanal] = useState(false);
+  const [, setNowTick] = useState(0);
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<string>("");
@@ -223,7 +221,7 @@ const RutinaGym: React.FC = () => {
     debounceTimerRef.current = setTimeout(() => {
       let results = buscarEjercicios(term);
       if (selectorOpen.grupo) {
-        results = results.sort((a, b) => (a.grupo === selectorOpen.grupo ? -1 : 1));
+        results = results.sort((a, _b) => (a.grupo === selectorOpen.grupo ? -1 : 1));
       }
       setSuggestions(results.slice(0, 12));
     }, 200);
@@ -263,19 +261,6 @@ const RutinaGym: React.FC = () => {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
   }, [history, selectedDay]);
 
-  const volumenSemanal = useMemo(() => {
-    if (!rutinaState) return new Map<Grupo, { min: number; max: number }>();
-    const acc = new Map<Grupo, { min: number; max: number }>();
-    dias.forEach((d) => {
-      rutinaState[d].ejercicios.forEach((e) => {
-        const [minS, maxS] = seriesToRange(e.series);
-        const cur = acc.get(e.grupo) || { min: 0, max: 0 };
-        acc.set(e.grupo, { min: cur.min + minS, max: cur.max + maxS });
-      });
-    });
-    return acc;
-  }, [rutinaState]);
-
   // =======================
   // 3. AHORA SÍ el return temprano de loading
   // =======================
@@ -294,11 +279,6 @@ const RutinaGym: React.FC = () => {
   const day = rutinaState[selectedDay];
 
   const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTimeRef.current) / 60000));
-
-  const parseNumber = (v?: string) => {
-    const n = parseFloat((v ?? "").toString().replace(",", "."));
-    return Number.isFinite(n) ? n : NaN;
-  };
 
   const parseRIR = (rirStr?: string): [number | null, number | null] => {
     if (!rirStr || !rirStr.trim()) return [null, null];
@@ -319,22 +299,16 @@ const RutinaGym: React.FC = () => {
     return `${min}-${max}`;
   };
 
-  const isValidRIR = (min?: number | null, max?: number | null): boolean => {
-    if (min === null || min === undefined) return false;
-    if (max === null || max === undefined) return true;
-    return max <= min;
-  };
-
   const setExerciseNote = (exerciseId: string | undefined, note: string) => {
     if (!exerciseId) return;
-    const trimmedNote = note.trim();
+    const shouldClear = note.trim() === "";
 
     setExerciseNotes((prev) => {
       const newNotes = { ...prev };
-      if (trimmedNote === "") {
+      if (shouldClear) {
         delete newNotes[exerciseId];
       } else {
-        newNotes[exerciseId] = trimmedNote;
+        newNotes[exerciseId] = note;
       }
       return newNotes;
     });
@@ -343,7 +317,7 @@ const RutinaGym: React.FC = () => {
     const entry = ensureEntry(k);
     setLogs((prev) => ({
       ...prev,
-      [k]: { ...entry, notes: trimmedNote || undefined },
+      [k]: { ...entry, notes: shouldClear ? undefined : note },
     }));
   };
 
@@ -526,9 +500,6 @@ const RutinaGym: React.FC = () => {
         nombre: sug.nombre,
         series: sug.series,
         reps: sug.reps,
-        rpe: sug.rpe,
-        tempo: sug.tempo,
-        nota: sug.nota,
         grupo: sug.grupo,
       });
       setAltName(selectorOpen.targetId, sug.nombre);
@@ -539,24 +510,22 @@ const RutinaGym: React.FC = () => {
     setSelectorOpen({ open: false });
   };
 
-  const exportToCSV = () => {
-    let csv = "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,RPE,TEMPO,NOTAS,GRUPO MUSCULAR\n";
+  const _exportToCSV = () => {
+    let csv = "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,GRUPO MUSCULAR\n";
 
     dias.forEach((dia) => {
       const data = rutinaState[dia];
       csv += `\n${data.nombre}\n`;
       data.ejercicios.forEach((ej) => {
-        csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${
-          ej.series
-        },${ej.reps},${ej.rpe},${ej.tempo || "-"},${ej.nota || "-"},${ej.grupo}\n`;
+        csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${ej.series},${ej.reps},${
+          ej.grupo
+        }\n`;
       });
     });
 
     csv += "\n\nABDOMINALES (día intercalado)\n";
     abdominales.forEach((ab) => {
-      csv += `OPCIONAL,${ab.nombre.replace(/,/g, " ")},${ab.series},${
-        ab.reps
-      },${ab.rpe},-,-,abdominales\n`;
+      csv += `OPCIONAL,${ab.nombre.replace(/,/g, " ")},${ab.series},${ab.reps},abdominales\n`;
     });
 
     const blob = new Blob(["\ufeff" + csv], {
@@ -630,50 +599,39 @@ const RutinaGym: React.FC = () => {
   const copiarDiaCompleto = async () => {
     const lines: string[] = [];
     const hoy = new Date();
-    lines.push(`🏋️ ${day.nombre}`);
-    lines.push(`📅 ${hoy.toLocaleDateString("es-AR")}`);
+    const fechaStr = hoy.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+    const grupos = Array.from(new Set(day.ejercicios.map((e) => e.grupo))).join(" / ");
+    lines.push(`${fechaStr} - ${day.nombre} - ${grupos}`);
     lines.push("");
 
     day.ejercicios.forEach((ej, i) => {
-      const idx = i + 1;
-      lines.push(`${idx}. ${ej.nombre}`);
-      lines.push(`   Series: ${ej.series} | Reps objetivo: ${ej.reps} | RPE: ${ej.rpe}`);
-      if (ej.tempo) lines.push(`   Tempo: ${ej.tempo}`);
-      if (ej.nota) lines.push(`   💡 ${ej.nota}`);
+      lines.push(`${i + 1}. ${ej.nombre}`);
 
       const sets = filledSets(ej.id, ej.series);
-      if (sets.length > 0) {
-        lines.push(`   📊 Series realizadas:`);
-        sets.forEach((s, si) => {
-          const peso = (s.peso ?? "").toString().trim() || "0";
-          const reps = (s.reps ?? "").toString().trim() || "0";
-          lines.push(`      ${si + 1}. ${peso} kg × ${reps} reps`);
-        });
+      if (sets.length === 0) {
+        lines.push("(sin series registradas)");
       } else {
-        lines.push(`   📊 Series realizadas: —`);
+        sets.forEach((s, si) => {
+          const reps = (s.reps ?? "").toString().trim();
+          const peso = (s.peso ?? "").toString().trim();
+          const rir = (s.rir ?? "").toString().trim();
+          const rirSuffix = rir ? ` @RIR ${rir}` : "";
+          lines.push(`${si + 1}) ${reps} x ${peso}kg${rirSuffix}`);
+        });
       }
 
-      lines.push(`   ✅ Completado: ${isDone(ej.id) ? "SÍ" : "NO"}`);
       lines.push("");
     });
-
-    lines.push("📈 Resumen del día:");
-    lines.push(`   Ejercicios completados: ${completedCount}/${day.ejercicios.length}`);
-    lines.push(`   Volumen total: ${currentVolume} kg`);
-    lines.push("");
-    lines.push("📝 Notas del entrenamiento:");
-    lines.push("____________________________");
-    lines.push("");
-    lines.push("🎯 Técnica: _______");
-    lines.push("");
-    lines.push("✨ Puntos a mejorar:");
-    lines.push("____________________________");
 
     const texto = lines.join("\n");
 
     try {
       await navigator.clipboard.writeText(texto);
-      alert("✅ Día copiado al portapapeles. Pegalo donde quieras.");
+      alert("Dia copiado al portapapeles. Pegalo donde quieras.");
     } catch {
       const ta = document.createElement("textarea");
       ta.value = texto;
@@ -681,7 +639,7 @@ const RutinaGym: React.FC = () => {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      alert("Día copiado (fallback).");
+      alert("Dia copiado (fallback).");
     }
   };
 
@@ -714,14 +672,14 @@ const RutinaGym: React.FC = () => {
 
     setExerciseNotes((prev) => {
       const copy = { ...prev };
-      let deletedCount = 0;
+      let _deletedCount = 0;
       Object.keys(copy).forEach((exerciseId) => {
         const exerciseBelongsToDay = rutinaState[selectedDay].ejercicios.some(
           (ej) => ej.id === exerciseId
         );
         if (exerciseBelongsToDay) {
           delete copy[exerciseId];
-          deletedCount++;
+          _deletedCount++;
         }
       });
       return copy;
@@ -841,11 +799,24 @@ const RutinaGym: React.FC = () => {
   };
 
   const addSet = (id: string | undefined) => {
+    if (!id) return;
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    current.push({ peso: "", reps: "", rir: "" });
+    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "", rir: "" };
+    current.push({
+      peso: current.length > 0 ? last.peso ?? "" : "",
+      reps: current.length > 0 ? last.reps ?? "" : "",
+      rir: current.length > 0 ? last.rir ?? "" : "",
+    });
+    const newIndex = current.length - 1;
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+
+    setTimeout(() => {
+      const nextInputId = `${id}-${newIndex}-reps`;
+      const nextInput = document.getElementById(nextInputId);
+      nextInput?.focus();
+    }, 0);
   };
 
   const removeSet = (id: string | undefined, idx: number) => {
@@ -862,19 +833,6 @@ const RutinaGym: React.FC = () => {
 
   const filledSets = (id: string | undefined, series: Series) =>
     getSets(id, series).filter(isFilled);
-
-  const duplicateLastSet = (id: string | undefined) => {
-    const k = keyFor(id);
-    const entry = ensureEntry(k);
-    const current = (entry.sets ?? []).slice();
-    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "", rir: "" };
-    current.push({
-      peso: last.peso ?? "",
-      reps: last.reps ?? "",
-      rir: last.rir ?? "",
-    });
-    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
-  };
 
   const clearEmptySets = (id: string | undefined, _series: Series) => {
     const k = keyFor(id);
@@ -921,7 +879,7 @@ const RutinaGym: React.FC = () => {
     return Math.round(total);
   })();
 
-  const formatDate = (isoDate: string) => {
+  const _formatDate = (isoDate: string) => {
     const d = new Date(isoDate);
     return d.toLocaleDateString("es-AR", {
       day: "2-digit",
@@ -1169,7 +1127,6 @@ const RutinaGym: React.FC = () => {
                         <div className="flex flex-wrap gap-3 text-xs text-slate-700">
                           <span className="font-bold">{ej.series}s</span>
                           <span className="font-mono">{ej.reps}r</span>
-                          <span>RPE {ej.rpe}</span>
                           {filledCount > 0 && (
                             <span className="bg-white/50 px-1.5 py-0.5 rounded font-semibold">
                               {filledCount}✅
@@ -1212,12 +1169,6 @@ const RutinaGym: React.FC = () => {
                             className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
                           >
                             + Serie
-                          </button>
-                          <button
-                            onClick={() => duplicateLastSet(ej.id)}
-                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
-                          >
-                            Duplicar
                           </button>
                         </div>
                       </div>
@@ -1373,7 +1324,7 @@ const RutinaGym: React.FC = () => {
                   {ab.nombre}
                 </h4>
                 <div className="text-slate-300 print:text-slate-800 text-[10px]">
-                  {ab.series} × {ab.reps} | RPE {ab.rpe}
+                  {ab.series} × {ab.reps}
                 </div>
               </div>
             ))}
@@ -1405,10 +1356,6 @@ const RutinaGym: React.FC = () => {
                 Tempo (ej: 1-0-3-1)
               </h4>
               <p>1s excéntrico – 0s pausa abajo – 3s concéntrico – 1s pausa arriba.</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-blue-400 mb-1 print:text-blue-700">RPE</h4>
-              <p>Escala 1–10. RPE 7 ≈ 3 reps en recámara; RPE 8 ≈ 2 reps. Evitar fallo.</p>
             </div>
           </div>
         </details>
@@ -1538,12 +1485,8 @@ const RutinaGym: React.FC = () => {
                         <div className="flex-1">
                           <div className="font-semibold text-white text-sm mb-1">{sug.nombre}</div>
                           <div className="text-xs text-slate-300">
-                            {sug.tempo ? `Tempo: ${sug.tempo} • ` : ""}
                             {sug.series} series • {sug.reps} reps
                           </div>
-                          {sug.nota && (
-                            <div className="text-xs text-blue-300 mt-1">💡 {sug.nota}</div>
-                          )}
                         </div>
                         <div
                           className={`px-2 py-1 rounded-full text-xs font-semibold ${
