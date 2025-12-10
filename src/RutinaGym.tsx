@@ -1056,7 +1056,12 @@ const RutinaGym: React.FC = () => {
                   colors.bg
                 } transition-all duration-200 ${isExpanded ? "ring-2 ring-white/20" : ""}`}
               >
-                <div className="p-4">
+                <div
+                  className="p-4 cursor-pointer"
+                  role="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => setExpandedExercise(isExpanded ? null : ej.id!)}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -1106,14 +1111,6 @@ const RutinaGym: React.FC = () => {
                         title="Notas del ejercicio"
                       >
                         🗒️
-                      </button>
-                      <button
-                        onClick={() => setExpandedExercise(isExpanded ? null : ej.id!)}
-                        className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 transition-transform ${
-                          isExpanded ? "rotate-180" : ""
-                        }`}
-                      >
-                        <span className="text-slate-700">⬇️</span>
                       </button>
                     </div>
                   </div>
