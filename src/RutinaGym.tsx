@@ -50,7 +50,7 @@ const RutinaGym: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [oneRMModal, setOneRMModal] = useState<{
     open: boolean;
     exerciseId?: string;
@@ -510,37 +510,6 @@ const RutinaGym: React.FC = () => {
     setSelectorOpen({ open: false });
   };
 
-  const _exportToCSV = () => {
-    let csv = "DÍA,EJERCICIO,SERIES,REPS OBJETIVO,GRUPO MUSCULAR\n";
-
-    dias.forEach((dia) => {
-      const data = rutinaState[dia];
-      csv += `\n${data.nombre}\n`;
-      data.ejercicios.forEach((ej) => {
-        csv += `${dia.toUpperCase()},${ej.nombre.replace(/,/g, " ")},${ej.series},${ej.reps},${
-          ej.grupo
-        }\n`;
-      });
-    });
-
-    csv += "\n\nABDOMINALES (día intercalado)\n";
-    abdominales.forEach((ab) => {
-      csv += `OPCIONAL,${ab.nombre.replace(/,/g, " ")},${ab.series},${ab.reps},abdominales\n`;
-    });
-
-    const blob = new Blob(["\ufeff" + csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "rutina_hipertrofia.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
   const sanitizeTSV = (v: any): string => {
     if (v === null || v === undefined) return "";
     return String(v).replace(/\t/g, " ").replace(/\r?\n/g, " / ").trim();
@@ -878,17 +847,6 @@ const RutinaGym: React.FC = () => {
 
     return Math.round(total);
   })();
-
-  const _formatDate = (isoDate: string) => {
-    const d = new Date(isoDate);
-    return d.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   // =======================
   // 5. RENDER
