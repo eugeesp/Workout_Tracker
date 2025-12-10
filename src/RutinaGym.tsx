@@ -534,11 +534,24 @@ const RutinaGym: React.FC = () => {
   };
 
   const generarTablaParaSheets = (): string => {
-    const fechaStr = new Date().toISOString().split("T")[0];
-    let tsv = "";
+    const header = [
+      "Fecha",
+      "Día / Ejercicio",
+      "Series / Reps",
+      "RIR",
+      "Peso corporal",
+      "Notas",
+      "Notas series",
+    ].join("\t");
 
+    const fechaStr = new Date().toISOString().split("T")[0];
     const pesoStr = bodyWeight ? sanitizeTSV(bodyWeight) : "";
-    tsv += `${fechaStr}\t${sanitizeTSV(day.nombre)}\t\t\t${pesoStr}\t\n`;
+
+    let tsv = `${header}\n`;
+    tsv += [fechaStr, sanitizeTSV(day.nombre), "", "", pesoStr, "", ""]
+      .map((cell) => sanitizeTSV(cell))
+      .join("\t");
+    tsv += "\n";
 
     day.ejercicios.forEach((ej) => {
       const k = keyFor(ej.id);
@@ -548,13 +561,33 @@ const RutinaGym: React.FC = () => {
         peso?: string;
         reps?: string;
         rir?: string;
+        note?: string;
       }>;
 
       const repsList = sets.map((s) => sanitizeTSV(s.reps)).join(",");
       const rirsList = sets.map((s) => asRIR(s.rir)).join(",");
+      const seriesNotesSummary = (sets || [])
+        .map((s, index) => {
+          const raw = (s?.note ?? (s as any)?.notes ?? "").trim();
+          if (!raw) return "";
+          return `S${index + 1}: ${raw}`;
+        })
+        .filter(Boolean)
+        .join(" | ");
       const nota = sanitizeTSV(getExerciseNote(ej.id) || entry?.notes || "");
 
-      tsv += `\t${sanitizeTSV(displayName(ej))}\t'${repsList}\t'${rirsList}\t\t${nota}\n`;
+      tsv += [
+        "",
+        sanitizeTSV(displayName(ej)),
+        `'${repsList}`,
+        `'${rirsList}`,
+        "",
+        nota,
+        sanitizeTSV(seriesNotesSummary),
+      ]
+        .map((cell) => sanitizeTSV(cell))
+        .join("\t");
+      tsv += "\n";
     });
 
     return tsv;
@@ -575,6 +608,10 @@ const RutinaGym: React.FC = () => {
     day.ejercicios.forEach((ej, i) => {
       lines.push(`${i + 1}. ${ej.nombre}`);
 
+      const k = keyFor(ej.id);
+      const entry = logs[k];
+      const exerciseNote = (getExerciseNote(ej.id) || entry?.notes || "").trim();
+
       const sets = filledSets(ej.id, ej.series);
       if (sets.length === 0) {
         lines.push("(sin series registradas)");
@@ -584,8 +621,17 @@ const RutinaGym: React.FC = () => {
           const peso = (s.peso ?? "").toString().trim();
           const rir = (s.rir ?? "").toString().trim();
           const rirSuffix = rir ? ` @RIR ${rir}` : "";
-          lines.push(`${si + 1}) ${reps} x ${peso}kg${rirSuffix}`);
+          lines.push(`   ${si + 1}) ${reps} x ${peso}kg${rirSuffix}`);
+
+          const setNote = (s.note ?? (s as any).notes ?? "").trim();
+          if (setNote) {
+            lines.push(`      • Nota serie: ${setNote}`);
+          }
         });
+      }
+
+      if (exerciseNote) {
+        lines.push(`   Notas ejercicio: ${exerciseNote}`);
       }
 
       lines.push("");
