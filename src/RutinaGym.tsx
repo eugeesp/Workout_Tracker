@@ -1293,10 +1293,27 @@ const RutinaGym: React.FC = () => {
                                     💬
                                   </button>
                                   <button
-                                    onClick={() => removeSet(ej.id, sidx)}
-                                    className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center"
+                                    type="button"
+                                    onClick={() => {
+                                      const hasReps = !!(s.reps && s.reps.toString().trim());
+                                      const hasPeso = !!(s.peso && s.peso.toString().trim());
+                                      const hasRir = !!(s.rir && s.rir.toString().trim());
+                                      const hasNote = !!(s.note && s.note.toString().trim());
+                                      const hasData = hasReps || hasPeso || hasRir || hasNote;
+
+                                      if (hasData) {
+                                        const ok = confirm(
+                                          "¿Eliminar esta serie? Los datos de esta serie se perderán."
+                                        );
+                                        if (!ok) return;
+                                      }
+
+                                      removeSet(ej.id, sidx);
+                                    }}
+                                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/70 hover:bg-white border border-slate-300 text-xs text-slate-700"
+                                    title="Eliminar serie"
                                   >
-                                    −
+                                    🗑
                                   </button>
                                 </div>
                               </div>
