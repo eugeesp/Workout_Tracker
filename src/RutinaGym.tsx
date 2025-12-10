@@ -879,6 +879,62 @@ const RutinaGym: React.FC = () => {
     return alt && alt.trim() ? alt.trim() : ej.nombre;
   };
 
+  const hasValue = (v: string | number | null | undefined) => (v ?? "").toString().trim() !== "";
+
+  const findIncompleteSets = () => {
+    return day.ejercicios
+      .map((ej) => {
+        const k = keyFor(ej.id);
+        const sets = normalizeSets(logs[k]?.sets);
+
+        const incompleteSeries = sets.reduce<number[]>((acc, set, idx) => {
+          const hasReps = hasValue(set?.reps);
+          const hasPeso = hasValue(set?.peso);
+
+          // Ignorar series totalmente vacAas
+          if (!hasReps && !hasPeso) return acc;
+
+          if (hasReps !== hasPeso) {
+            acc.push(idx + 1);
+          }
+
+          return acc;
+        }, []);
+
+        if (incompleteSeries.length === 0) return null;
+
+        return {
+          nombre: displayName(ej),
+          series: incompleteSeries,
+        };
+      })
+      .filter(Boolean) as Array<{ nombre: string; series: number[] }>;
+  };
+
+  const handleFinalizeClick = () => {
+    const incompletas = findIncompleteSets();
+
+    if (incompletas.length === 0) {
+      const confirmFinish = window.confirm(`¿Seguro que quieres finalizar la sesión de ${day.nombre}?`);
+      if (confirmFinish) {
+        finalizarSesion();
+      }
+      return;
+    }
+
+    const lista = incompletas
+      .map((item) => `${item.nombre} (S${item.series.join(", S")})`)
+      .join(" | ");
+
+    const confirmFinish = window.confirm(
+      `Tienes series incompletas en: ${lista}. ¿Quieres finalizar igual?`
+    );
+
+    if (confirmFinish) {
+      finalizarSesion();
+    }
+  };
+
   // =======================
   // 5. RENDER
   // =======================
@@ -1387,7 +1443,7 @@ const RutinaGym: React.FC = () => {
           <div className="p-2">
             <div className="flex items-center justify-between gap-1">
               <button
-                onClick={finalizarSesion}
+                onClick={handleFinalizeClick}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold text-xs transition-all active:scale-95"
               >
                 ✓ FINALIZAR
