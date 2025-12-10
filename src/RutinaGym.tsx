@@ -3,7 +3,7 @@ import { abdominales, colorLegend, dias, rutina } from "./data/rutina";
 import { buscarEjercicios, ejerciciosDB } from "./data/ejercicios";
 import { getFromDB, saveToDB } from "./storage/indexedDb";
 import { normalizeRutina, withIds } from "./utils/rutinaUtils";
-import { Ejercicio, Grupo, Series, SessionExercise, WorkoutSession } from "./types";
+import { Ejercicio, Grupo, Series, SessionExercise, WorkoutSession, SerieLog } from "./types";
 
 const STORAGE_HISTORY = "rg-history-v2" as const;
 const STORAGE_CURRENT = "rg-current-v2" as const;
@@ -21,7 +21,7 @@ const RutinaGym: React.FC = () => {
     Record<
       string,
       {
-        sets?: Array<{ peso?: string; reps?: string; rir?: string }>;
+        sets?: Array<SerieLog>;
         alt?: string;
         notes?: string;
       }
@@ -40,7 +40,8 @@ const RutinaGym: React.FC = () => {
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<string>("");
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
+  const [exerciseNotesOpen, setExerciseNotesOpen] = useState<Record<string, boolean>>({});
+  const [setNotesOpen, setSetNotesOpen] = useState<Record<string, Record<number, boolean>>>({});
   const [selectorOpen, setSelectorOpen] = useState<{
     open: boolean;
     targetId?: string;
@@ -97,18 +98,6 @@ const RutinaGym: React.FC = () => {
           if (currentData.bodyWeight) {
             setBodyWeight(currentData.bodyWeight.toString());
           }
-
-          const loadedNotes: Record<string, string> = {};
-          Object.keys(migratedLogs).forEach((k) => {
-            const notes = migratedLogs[k].notes;
-            if (notes && notes.trim()) {
-              const exerciseId = k.split(":")[1];
-              if (exerciseId) {
-                loadedNotes[exerciseId] = notes;
-              }
-            }
-          });
-          setExerciseNotes(loadedNotes);
         }
       } catch (error) {
         console.error("Error o timeout loading datos:", error);
@@ -299,31 +288,25 @@ const RutinaGym: React.FC = () => {
     return `${min}-${max}`;
   };
 
-  const setExerciseNote = (exerciseId: string | undefined, note: string) => {
-    if (!exerciseId) return;
-    const shouldClear = note.trim() === "";
-
-    setExerciseNotes((prev) => {
-      const newNotes = { ...prev };
-      if (shouldClear) {
-        delete newNotes[exerciseId];
-      } else {
-        newNotes[exerciseId] = note;
-      }
-      return newNotes;
+  const setExerciseNote = (exerciseId: string, note: string) => {
+    const key = keyFor(exerciseId);
+    setLogs((prev) => {
+      const existing = prev[key] ?? { sets: [] as SerieLog[], notes: "" };
+      return {
+        ...prev,
+        [key]: {
+          ...existing,
+          notes: note,
+        },
+      };
     });
-
-    const k = keyFor(exerciseId);
-    const entry = ensureEntry(k);
-    setLogs((prev) => ({
-      ...prev,
-      [k]: { ...entry, notes: shouldClear ? undefined : note },
-    }));
   };
 
   const getExerciseNote = (exerciseId: string | undefined): string => {
     if (!exerciseId) return "";
-    return exerciseNotes[exerciseId] ?? "";
+    const key = keyFor(exerciseId);
+    const entry = logs[key];
+    return entry?.notes ?? "";
   };
 
   const nextDay = () => {
@@ -455,6 +438,18 @@ const RutinaGym: React.FC = () => {
       Object.keys(copy).forEach((k) => {
         if (k.startsWith(`${day}:`) && k.includes(ejId)) delete copy[k];
       });
+      return copy;
+    });
+    setExerciseNotesOpen((prev) => {
+      if (!(ejId in prev)) return prev;
+      const copy = { ...prev };
+      delete copy[ejId];
+      return copy;
+    });
+    setSetNotesOpen((prev) => {
+      if (!(ejId in prev)) return prev;
+      const copy = { ...prev };
+      delete copy[ejId];
       return copy;
     });
 
@@ -639,20 +634,8 @@ const RutinaGym: React.FC = () => {
       return copy;
     });
 
-    setExerciseNotes((prev) => {
-      const copy = { ...prev };
-      let _deletedCount = 0;
-      Object.keys(copy).forEach((exerciseId) => {
-        const exerciseBelongsToDay = rutinaState[selectedDay].ejercicios.some(
-          (ej) => ej.id === exerciseId
-        );
-        if (exerciseBelongsToDay) {
-          delete copy[exerciseId];
-          _deletedCount++;
-        }
-      });
-      return copy;
-    });
+    setExerciseNotesOpen({});
+    setSetNotesOpen({});
 
     setBodyWeight("");
     console.log("✅ Día limpiado completamente");
@@ -705,19 +688,19 @@ const RutinaGym: React.FC = () => {
     );
   };
 
-  const getSets = (id: string | undefined, _series: Series) => {
+  const getSets = (id: string | undefined, _series: Series): SerieLog[] => {
     const k = keyFor(id);
     const entry = logs[k];
     const sets = entry?.sets ?? [];
     if (sets.length > 0) return sets;
-    return [{ peso: "", reps: "", rir: "" }];
+    return [{ peso: "", reps: "", rir: "", note: "" }];
   };
 
   const ensureEntry = (k: string) => {
     const e = logs[k];
     if (!e) {
       const created = {
-        sets: [] as Array<{ peso?: string; reps?: string; rir?: string }>,
+        sets: [] as Array<SerieLog>,
         alt: undefined as string | undefined,
         notes: undefined as string | undefined,
       };
@@ -729,7 +712,7 @@ const RutinaGym: React.FC = () => {
       alt: e.alt,
       notes: e.notes,
     } as {
-      sets: Array<{ peso?: string; reps?: string; rir?: string }>;
+      sets: Array<SerieLog>;
       alt?: string;
       notes?: string;
     };
@@ -746,7 +729,7 @@ const RutinaGym: React.FC = () => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    while (current.length <= idx) current.push({ peso: "", reps: "", rir: "" });
+    while (current.length <= idx) current.push({ peso: "", reps: "", rir: "", note: "" });
 
     const set = current[idx];
 
@@ -767,16 +750,42 @@ const RutinaGym: React.FC = () => {
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
+  const setSetNote = (exerciseId: string, index: number, note: string) => {
+    const key = keyFor(exerciseId);
+    setLogs((prev) => {
+      const entry = prev[key] ?? { sets: [] as SerieLog[] };
+
+      const sets = [...(entry.sets || [])];
+      const current = sets[index] || {};
+      sets[index] = {
+        ...current,
+        note,
+      };
+
+      return {
+        ...prev,
+        [key]: {
+          ...entry,
+          sets,
+        },
+      };
+    });
+  };
+
   const addSet = (id: string | undefined) => {
     if (!id) return;
     const k = keyFor(id);
     const entry = ensureEntry(k);
     const current = (entry.sets ?? []).slice();
-    const last = current.length > 0 ? current[current.length - 1] : { peso: "", reps: "", rir: "" };
+    const last =
+      current.length > 0
+        ? current[current.length - 1]
+        : { peso: "", reps: "", rir: "", note: "" };
     current.push({
       peso: current.length > 0 ? last.peso ?? "" : "",
       reps: current.length > 0 ? last.reps ?? "" : "",
       rir: current.length > 0 ? last.rir ?? "" : "",
+      note: current.length > 0 ? last.note ?? "" : "",
     });
     const newIndex = current.length - 1;
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
@@ -795,9 +804,22 @@ const RutinaGym: React.FC = () => {
     if (current.length === 0) return;
     current.splice(idx, 1);
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+    setSetNotesOpen((prev) => {
+      if (!id) return prev;
+      const existing = prev[id];
+      if (!existing) return prev;
+      const updated: Record<number, boolean> = {};
+      Object.entries(existing).forEach(([key, value]) => {
+        const numKey = Number(key);
+        if (Number.isNaN(numKey) || numKey === idx) return;
+        const nextIndex = numKey > idx ? numKey - 1 : numKey;
+        updated[nextIndex] = value;
+      });
+      return { ...prev, [id]: updated };
+    });
   };
 
-  const isFilled = (s?: { peso?: string; reps?: string }) =>
+  const isFilled = (s?: SerieLog) =>
     !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== "";
 
   const filledSets = (id: string | undefined, series: Series) =>
@@ -809,7 +831,7 @@ const RutinaGym: React.FC = () => {
     let current = (entry.sets ?? []).slice();
     current = current.filter((s) => isFilled(s));
     if (current.length === 0) {
-      current = [{ peso: "", reps: "", rir: "" }];
+      current = [{ peso: "", reps: "", rir: "", note: "" }];
     }
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
@@ -1052,6 +1074,8 @@ const RutinaGym: React.FC = () => {
             const isExpanded = expandedExercise === ej.id;
             const sets = getSets(ej.id, ej.series);
             const filledCount = filledSets(ej.id, ej.series).length;
+            const exerciseNote = getExerciseNote(ej.id);
+            const isExerciseNoteOpen = !!exerciseNotesOpen[ej.id!];
 
             return (
               <div
@@ -1105,14 +1129,30 @@ const RutinaGym: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setExpandedExercise(isExpanded ? null : ej.id!)}
-                      className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 transition-transform ${
-                        isExpanded ? "rotate-180" : ""
-                      }`}
-                    >
-                      <span className="text-slate-700">⬇️</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExerciseNotesOpen((prev) => ({
+                            ...prev,
+                            [ej.id!]: !prev[ej.id!],
+                          }));
+                        }}
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-xs"
+                        title="Notas del ejercicio"
+                      >
+                        🗒️
+                      </button>
+                      <button
+                        onClick={() => setExpandedExercise(isExpanded ? null : ej.id!)}
+                        className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 transition-transform ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      >
+                        <span className="text-slate-700">⬇️</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1133,66 +1173,98 @@ const RutinaGym: React.FC = () => {
                       <div className="space-y-2">
                         {sets.map((s, sidx) => {
                           const [rirMin, rirMax] = parseRIR(s.rir);
+                          const setNoteOpen = setNotesOpen[ej.id!]?.[sidx] ?? false;
                           return (
-                            <div
-                              key={sidx}
-                              className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2"
-                            >
-                              <span className="text-xs font-semibold text-slate-700 w-6">
-                                {sidx + 1}.
-                              </span>
+                            <div key={sidx} className="space-y-1">
+                              <div className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2">
+                                <span className="text-xs font-semibold text-slate-700 w-6">
+                                  {sidx + 1}.
+                                </span>
 
-                              <input
-                                {...createInputProps(ej.id!, sidx, "reps")}
-                                type="number"
-                                inputMode="numeric"
-                                placeholder="Reps"
-                                value={s.reps ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
-                                className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
-                              />
-
-                              <input
-                                {...createInputProps(ej.id!, sidx, "peso")}
-                                type="number"
-                                inputMode="decimal"
-                                placeholder="Kg"
-                                value={s.peso ?? ""}
-                                onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
-                                className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
-                              />
-
-                              <div className="flex items-center gap-1">
                                 <input
-                                  {...createInputProps(ej.id!, sidx, "rirMin")}
+                                  {...createInputProps(ej.id!, sidx, "reps")}
                                   type="number"
                                   inputMode="numeric"
-                                  placeholder="RIR"
-                                  value={rirMin ?? ""}
-                                  onChange={(e) =>
-                                    setSetValue(ej.id, sidx, "rirMin", e.target.value)
-                                  }
-                                  className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                  placeholder="Reps"
+                                  value={s.reps ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
+                                  className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
-                                <span className="text-slate-600 text-xs">-</span>
+
                                 <input
-                                  {...createInputProps(ej.id!, sidx, "rirMax")}
+                                  {...createInputProps(ej.id!, sidx, "peso")}
                                   type="number"
-                                  inputMode="numeric"
-                                  placeholder="RIR"
-                                  value={rirMax ?? ""}
-                                  onChange={(e) =>
-                                    setSetValue(ej.id, sidx, "rirMax", e.target.value)
-                                  }
-                                  className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                  inputMode="decimal"
+                                  placeholder="Kg"
+                                  value={s.peso ?? ""}
+                                  onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
+                                  className="w-full h-10 text-center bg-white rounded border-0 text-sm font-semibold"
                                 />
-                                <button
-                                  onClick={() => removeSet(ej.id, sidx)}
-                                  className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center"
-                                >
-                                  −
-                                </button>
+
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    {...createInputProps(ej.id!, sidx, "rirMin")}
+                                    type="number"
+                                    inputMode="numeric"
+                                    placeholder="RIR"
+                                    value={rirMin ?? ""}
+                                    onChange={(e) =>
+                                      setSetValue(ej.id, sidx, "rirMin", e.target.value)
+                                    }
+                                    className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                  />
+                                  <span className="text-slate-600 text-xs">-</span>
+                                  <input
+                                    {...createInputProps(ej.id!, sidx, "rirMax")}
+                                    type="number"
+                                    inputMode="numeric"
+                                    placeholder="RIR"
+                                    value={rirMax ?? ""}
+                                    onChange={(e) =>
+                                      setSetValue(ej.id, sidx, "rirMax", e.target.value)
+                                    }
+                                    className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSetNotesOpen((prev) => {
+                                        const exerciseId = ej.id!;
+                                        const prevForExercise = prev[exerciseId] || {};
+                                        return {
+                                          ...prev,
+                                          [exerciseId]: {
+                                            ...prevForExercise,
+                                            [sidx]: !prevForExercise[sidx],
+                                          },
+                                        };
+                                      });
+                                    }}
+                                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/70 hover:bg-white border border-slate-300 text-xs"
+                                    title="Notas de esta serie"
+                                  >
+                                    💬
+                                  </button>
+                                  <button
+                                    onClick={() => removeSet(ej.id, sidx)}
+                                    className="w-8 h-8 bg-red-500 text-white rounded flex items-center justify-center"
+                                  >
+                                    −
+                                  </button>
+                                </div>
                               </div>
+                              {setNoteOpen && (
+                                <div className="mt-1">
+                                  <textarea
+                                    className="w-full text-[11px] bg-white/80 border border-slate-300 rounded-md p-1.5 resize-none"
+                                    rows={2}
+                                    value={s.note ?? ""}
+                                    onChange={(e) => setSetNote(ej.id!, sidx, e.target.value)}
+                                    placeholder="Nota rápida para esta serie..."
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1226,15 +1298,20 @@ const RutinaGym: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-white/20">
-                      <textarea
-                        value={getExerciseNote(ej.id)}
-                        onChange={(e) => setExerciseNote(ej.id, e.target.value)}
-                        placeholder="📝 Notas del ejercicio..."
-                        rows={2}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-400 bg-white/80 text-slate-800 resize-none"
-                      />
-                    </div>
+                    {isExerciseNoteOpen && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Notas del ejercicio
+                        </label>
+                        <textarea
+                          className="w-full text-xs bg-white/80 border border-slate-300 rounded-md p-2 resize-none"
+                          rows={3}
+                          value={exerciseNote}
+                          onChange={(e) => setExerciseNote(ej.id!, e.target.value)}
+                          placeholder="Escribí aquí tus notas para este ejercicio..."
+                        />
+                      </div>
+                    )}
 
                     <div className="flex gap-2 justify-center pt-2">
                       <button

@@ -2,6 +2,13 @@ export type Grupo = "pecho" | "espalda" | "biceps" | "triceps" | "hombro" | "pie
 
 export type Series = number | `${number}-${number}`;
 
+export type SerieLog = {
+  reps?: string;
+  peso?: string;
+  rir?: string;
+  note?: string;
+};
+
 export interface Ejercicio {
   id?: string;
   nombre: string;
@@ -16,7 +23,7 @@ export interface DiaRutina {
 }
 
 export interface SessionExercise {
-  sets: Array<{ peso?: string; reps?: string; rir?: string }>;
+  sets: SerieLog[];
   alt?: string;
   notes?: string;
   completed: boolean;
