@@ -77,6 +77,13 @@ const RutinaGym: React.FC = () => {
             if (!migratedLogs[k].notes) {
               migratedLogs[k].notes = undefined;
             }
+            const sets = migratedLogs[k].sets;
+            if (Array.isArray(sets)) {
+              migratedLogs[k].sets = sets.map((s: SerieLog) => ({
+                ...s,
+                fallo: s?.fallo ?? false,
+              }));
+            }
           });
           setLogs(migratedLogs);
 
@@ -268,6 +275,27 @@ const RutinaGym: React.FC = () => {
     if (min === null || min === undefined) return "";
     if (max === null || max === undefined) return min.toString();
     return `${min}-${max}`;
+  };
+
+  const emptySet = (): SerieLog => ({
+    reps: "",
+    peso: "",
+    rir: "",
+    note: "",
+    fallo: false,
+  });
+
+  const normalizeSets = (sets?: SerieLog[]): SerieLog[] => {
+    if (!Array.isArray(sets)) return [];
+    return sets.map((s) => ({
+      ...emptySet(),
+      ...s,
+      reps: s?.reps ?? "",
+      peso: s?.peso ?? "",
+      rir: s?.rir ?? "",
+      note: s?.note ?? "",
+      fallo: s?.fallo ?? false,
+    }));
   };
 
   const setExerciseNote = (exerciseId: string, note: string) => {
@@ -497,6 +525,11 @@ const RutinaGym: React.FC = () => {
     return raw === "" ? "-" : raw;
   };
 
+  const rirValueForSet = (s: SerieLog): string => {
+    if (s.fallo) return "F";
+    return asRIR(s.rir);
+  };
+
   const generarTablaParaSheets = (): string => {
     const header = [
       "Fecha",
@@ -521,16 +554,11 @@ const RutinaGym: React.FC = () => {
       const k = keyFor(ej.id);
       const entry = logs[k];
 
-      const sets = (Array.isArray(entry?.sets) ? entry.sets : []) as Array<{
-        peso?: string;
-        reps?: string;
-        rir?: string;
-        note?: string;
-      }>;
+      const sets = normalizeSets(entry?.sets);
 
       const repsList = sets.map((s) => sanitizeTSV(s.reps)).join(",");
-      const rirsList = sets.map((s) => asRIR(s.rir)).join(",");
-      const seriesNotesSummary = (sets || [])
+      const rirsList = sets.map((s) => sanitizeTSV(rirValueForSet(s))).join(",");
+      const seriesNotesSummary = sets
         .map((s, index) => {
           const raw = (s?.note ?? (s as any)?.notes ?? "").trim();
           if (!raw) return "";
@@ -584,7 +612,7 @@ const RutinaGym: React.FC = () => {
           const reps = (s.reps ?? "").toString().trim();
           const peso = (s.peso ?? "").toString().trim();
           const rir = (s.rir ?? "").toString().trim();
-          const rirSuffix = rir ? ` @RIR ${rir}` : "";
+          const rirSuffix = s.fallo ? " @FALLO" : rir ? ` @RIR ${rir}` : "";
           lines.push(`   ${si + 1}) ${reps} x ${peso}kg${rirSuffix}`);
 
           const setNote = (s.note ?? (s as any).notes ?? "").trim();
@@ -647,7 +675,7 @@ const RutinaGym: React.FC = () => {
     day.ejercicios.forEach((ej) => {
       const k = keyFor(ej.id);
       const entry = logs[k];
-      const sets = (entry?.sets ?? []).filter(isFilled);
+      const sets = normalizeSets(entry?.sets).filter(isFilled);
 
       exercises[ej.id!] = {
         sets: sets,
@@ -689,9 +717,9 @@ const RutinaGym: React.FC = () => {
   const getSets = (id: string | undefined, _series: Series): SerieLog[] => {
     const k = keyFor(id);
     const entry = logs[k];
-    const sets = entry?.sets ?? [];
+    const sets = normalizeSets(entry?.sets);
     if (sets.length > 0) return sets;
-    return [{ peso: "", reps: "", rir: "", note: "" }];
+    return [emptySet()];
   };
 
   const ensureEntry = (k: string) => {
@@ -706,7 +734,7 @@ const RutinaGym: React.FC = () => {
       return created;
     }
     const neo = {
-      sets: e.sets ?? [],
+      sets: normalizeSets(e.sets),
       alt: e.alt,
       notes: e.notes,
     } as {
@@ -726,8 +754,8 @@ const RutinaGym: React.FC = () => {
   ) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
-    const current = (entry.sets ?? []).slice();
-    while (current.length <= idx) current.push({ peso: "", reps: "", rir: "", note: "" });
+    const current = normalizeSets(entry.sets);
+    while (current.length <= idx) current.push(emptySet());
 
     const set = current[idx];
 
@@ -748,13 +776,32 @@ const RutinaGym: React.FC = () => {
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
   };
 
+  const toggleFallo = (exerciseId: string | undefined, setIndex: number) => {
+    if (!exerciseId) return;
+    const key = keyFor(exerciseId);
+    const entry = ensureEntry(key);
+    const sets = normalizeSets(entry.sets);
+    while (sets.length <= setIndex) sets.push(emptySet());
+
+    const currentSet = sets[setIndex] ?? emptySet();
+    const nextFallo = currentSet.fallo !== true;
+
+    sets[setIndex] = {
+      ...currentSet,
+      fallo: nextFallo,
+      rir: nextFallo ? "" : currentSet.rir ?? "",
+    };
+
+    setLogs((prev) => ({ ...prev, [key]: { ...entry, sets } }));
+  };
+
   const setSetNote = (exerciseId: string, index: number, note: string) => {
     const key = keyFor(exerciseId);
     setLogs((prev) => {
       const entry = prev[key] ?? { sets: [] as SerieLog[] };
 
-      const sets = [...(entry.sets || [])];
-      const current = sets[index] || {};
+      const sets = normalizeSets(entry.sets);
+      const current = sets[index] || emptySet();
       sets[index] = {
         ...current,
         note,
@@ -774,16 +821,15 @@ const RutinaGym: React.FC = () => {
     if (!id) return;
     const k = keyFor(id);
     const entry = ensureEntry(k);
-    const current = (entry.sets ?? []).slice();
-    const last =
-      current.length > 0
-        ? current[current.length - 1]
-        : { peso: "", reps: "", rir: "", note: "" };
+    const current = normalizeSets(entry.sets);
+    const hasPrevious = current.length > 0;
+    const last = hasPrevious ? current[current.length - 1] : emptySet();
     current.push({
-      peso: current.length > 0 ? last.peso ?? "" : "",
-      reps: current.length > 0 ? last.reps ?? "" : "",
-      rir: current.length > 0 ? last.rir ?? "" : "",
-      note: current.length > 0 ? last.note ?? "" : "",
+      peso: hasPrevious ? last.peso ?? "" : "",
+      reps: hasPrevious ? last.reps ?? "" : "",
+      rir: hasPrevious ? last.rir ?? "" : "",
+      note: hasPrevious ? last.note ?? "" : "",
+      fallo: hasPrevious ? last.fallo ?? false : false,
     });
     const newIndex = current.length - 1;
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
@@ -798,7 +844,7 @@ const RutinaGym: React.FC = () => {
   const removeSet = (id: string | undefined, idx: number) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
-    const current = (entry.sets ?? []).slice();
+    const current = normalizeSets(entry.sets);
     if (current.length === 0) return;
     current.splice(idx, 1);
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
@@ -966,12 +1012,15 @@ const RutinaGym: React.FC = () => {
                                   <div>
                                     <span className="text-white">{exData.alt || originalEx.nombre}</span>
                                     <div className="text-slate-300 text-xs mt-1 font-mono">
-                                      {exData.sets.map((s, i) => (
-                                        <span key={i} className="mr-2">
-                                          {s.peso}×{s.reps}
-                                          {s.rir ? `(${s.rir})` : ""}
-                                        </span>
-                                      ))}
+                                      {normalizeSets(exData.sets).map((s, i) => {
+                                        const rirText = s.fallo ? "F" : s.rir;
+                                        return (
+                                          <span key={i} className="mr-2">
+                                            {s.peso}×{s.reps}
+                                            {rirText ? `(${rirText})` : ""}
+                                          </span>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                   {exData.notes && (
@@ -1086,11 +1135,16 @@ const RutinaGym: React.FC = () => {
                       </div>
                       <div className="space-y-2">
                         {sets.map((s, sidx) => {
-                          const [rirMin, rirMax] = parseRIR(s.rir);
+                          const isFallo = s.fallo === true;
+                          const [rirMin, rirMax] = isFallo ? [null, null] : parseRIR(s.rir);
                           const setNoteOpen = setNotesOpen[ej.id!]?.[sidx] ?? false;
                           return (
                             <div key={sidx} className="space-y-1">
-                              <div className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 bg-white/50 rounded-lg p-2">
+                              <div
+                                className={`grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 rounded-lg p-2 border ${
+                                  isFallo ? "bg-amber-100 border-amber-300" : "bg-white/50 border-transparent"
+                                }`}
+                              >
                                 <span className="text-xs font-semibold text-slate-700 w-6">
                                   {sidx + 1}.
                                 </span>
@@ -1116,16 +1170,31 @@ const RutinaGym: React.FC = () => {
                                 />
 
                                 <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleFallo(ej.id, sidx)}
+                                    className={`w-8 h-8 flex items-center justify-center rounded-full border text-xs ${
+                                      isFallo
+                                        ? "bg-amber-300 border-amber-500 text-amber-900 font-bold"
+                                        : "bg-white/70 border-slate-300 text-slate-700"
+                                    }`}
+                                    title={isFallo ? "Serie al fallo" : "Marcar serie al fallo"}
+                                  >
+                                    ⚡
+                                  </button>
                                   <input
                                     {...createInputProps(ej.id!, sidx, "rirMin")}
                                     type="number"
                                     inputMode="numeric"
                                     placeholder="RIR"
-                                    value={rirMin ?? ""}
+                                    value={isFallo ? "" : rirMin ?? ""}
                                     onChange={(e) =>
                                       setSetValue(ej.id, sidx, "rirMin", e.target.value)
                                     }
-                                    className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                    disabled={isFallo}
+                                    className={`w-12 h-10 text-center rounded border-0 text-sm font-semibold ${
+                                      isFallo ? "bg-amber-50 text-amber-700" : "bg-white"
+                                    }`}
                                   />
                                   <span className="text-slate-600 text-xs">-</span>
                                   <input
@@ -1133,11 +1202,14 @@ const RutinaGym: React.FC = () => {
                                     type="number"
                                     inputMode="numeric"
                                     placeholder="RIR"
-                                    value={rirMax ?? ""}
+                                    value={isFallo ? "" : rirMax ?? ""}
                                     onChange={(e) =>
                                       setSetValue(ej.id, sidx, "rirMax", e.target.value)
                                     }
-                                    className="w-12 h-10 text-center bg-white rounded border-0 text-sm font-semibold"
+                                    disabled={isFallo}
+                                    className={`w-12 h-10 text-center rounded border-0 text-sm font-semibold ${
+                                      isFallo ? "bg-amber-50 text-amber-700" : "bg-white"
+                                    }`}
                                   />
                                   <button
                                     type="button"
@@ -1167,7 +1239,8 @@ const RutinaGym: React.FC = () => {
                                       const hasPeso = !!(s.peso && s.peso.toString().trim());
                                       const hasRir = !!(s.rir && s.rir.toString().trim());
                                       const hasNote = !!(s.note && s.note.toString().trim());
-                                      const hasData = hasReps || hasPeso || hasRir || hasNote;
+                                      const hasFallo = s.fallo === true;
+                                      const hasData = hasReps || hasPeso || hasRir || hasNote || hasFallo;
 
                                       if (hasData) {
                                         const ok = confirm(

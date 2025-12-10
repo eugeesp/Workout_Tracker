@@ -7,6 +7,7 @@ export type SerieLog = {
   peso?: string;
   rir?: string;
   note?: string;
+  fallo?: boolean;
 };
 
 export interface Ejercicio {
