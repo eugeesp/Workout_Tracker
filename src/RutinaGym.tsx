@@ -436,13 +436,6 @@ const RutinaGym: React.FC = () => {
   };
 
   const removeExercise = (day: keyof typeof rutinaState, ejId: string) => {
-    setDone((d) => {
-      const copy = { ...d };
-      Object.keys(copy).forEach((k) => {
-        if (k.startsWith(`${day}:`) && k.includes(ejId)) delete copy[k];
-      });
-      return copy;
-    });
     setLogs((l) => {
       const copy = { ...l };
       Object.keys(copy).forEach((k) => {
