@@ -26,7 +26,6 @@ export interface SessionExercise {
   sets: SerieLog[];
   alt?: string;
   notes?: string;
-  completed: boolean;
 }
 
 export interface WorkoutSession {

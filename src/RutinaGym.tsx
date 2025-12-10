@@ -16,7 +16,6 @@ const RutinaGym: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
-  const [done, setDone] = useState<Record<string, boolean>>({});
   const [logs, setLogs] = useState<
     Record<
       string,
@@ -36,7 +35,6 @@ const RutinaGym: React.FC = () => {
   });
   const [showHistory, setShowHistory] = useState(false);
   const sessionStartTimeRef = useRef(Date.now());
-  const [, setNowTick] = useState(0);
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const [bodyWeight, setBodyWeight] = useState<string>("");
@@ -52,22 +50,10 @@ const RutinaGym: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Ejercicio[]>([]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [oneRMModal, setOneRMModal] = useState<{
-    open: boolean;
-    exerciseId?: string;
-    currentWeight?: string;
-    currentReps?: string;
-  }>({ open: false });
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [rutinaState, setRutinaState] = useState<typeof rutina | null>(null);
   // small ref counter so multiple independent loads don't race to set loading=false
   const pendingLoadsRef = useRef<number>(2);
-
-  // useEffect para el timer
-  useEffect(() => {
-    const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   // Cargar datos desde IndexedDB al montar
   useEffect(() => {
@@ -86,7 +72,6 @@ const RutinaGym: React.FC = () => {
 
         if (historyData) setHistory(historyData);
         if (currentData) {
-          setDone(currentData.done || {});
           const migratedLogs = currentData.logs || {};
           Object.keys(migratedLogs).forEach((k) => {
             if (!migratedLogs[k].notes) {
@@ -164,12 +149,11 @@ const RutinaGym: React.FC = () => {
     if (!isLoading) {
       const bodyWeightNum = parseFloat(bodyWeight || "0");
       saveToDB(STORAGE_CURRENT, {
-        done,
         logs,
         bodyWeight: bodyWeightNum > 0 ? bodyWeightNum : undefined,
       });
     }
-  }, [done, logs, bodyWeight, isLoading]);
+  }, [logs, bodyWeight, isLoading]);
 
   useEffect(() => {
     localStorage.setItem("rg-selectedDay", selectedDay);
@@ -266,8 +250,6 @@ const RutinaGym: React.FC = () => {
   // =======================
 
   const day = rutinaState[selectedDay];
-
-  const elapsedMin = Math.max(0, Math.round((Date.now() - sessionStartTimeRef.current) / 60000));
 
   const parseRIR = (rirStr?: string): [number | null, number | null] => {
     if (!rirStr || !rirStr.trim()) return [null, null];
@@ -515,24 +497,6 @@ const RutinaGym: React.FC = () => {
     return raw === "" ? "-" : raw;
   };
 
-  const openOneRMFor = (exerciseId?: string) => {
-    const k = `${selectedDay}:${exerciseId ?? ""}`;
-    const filled = (logs[k]?.sets ?? []).filter(
-      (s: any) =>
-        !!s && (s.peso ?? "").toString().trim() !== "" && (s.reps ?? "").toString().trim() !== ""
-    );
-    const last =
-      filled.length > 0
-        ? filled[filled.length - 1]
-        : getSets(exerciseId, 3)[0] || { peso: "", reps: "" };
-    setOneRMModal({
-      open: true,
-      exerciseId,
-      currentWeight: (last.peso ?? "").toString(),
-      currentReps: (last.reps ?? "").toString(),
-    });
-  };
-
   const generarTablaParaSheets = (): string => {
     const header = [
       "Fecha",
@@ -654,21 +618,9 @@ const RutinaGym: React.FC = () => {
   };
 
   const keyFor = (id?: string) => `${selectedDay}:${id ?? ""}`;
-  const isDone = (id?: string) => !!done[keyFor(id)];
-  const toggleDone = (id?: string) => setDone((d) => ({ ...d, [keyFor(id)]: !isDone(id) }));
 
   const resetDay = () => {
     console.log("🧹 Limpiando día:", selectedDay);
-
-    setDone((d) => {
-      const copy = { ...d };
-      Object.keys(copy).forEach((k) => {
-        if (k.startsWith(`${selectedDay}:`)) {
-          delete copy[k];
-        }
-      });
-      return copy;
-    });
 
     setLogs((prev) => {
       const copy = { ...prev };
@@ -684,6 +636,7 @@ const RutinaGym: React.FC = () => {
     setSetNotesOpen({});
 
     setBodyWeight("");
+    sessionStartTimeRef.current = Date.now();
     console.log("✅ Día limpiado completamente");
   };
 
@@ -700,7 +653,6 @@ const RutinaGym: React.FC = () => {
         sets: sets,
         alt: entry?.alt,
         notes: entry?.notes,
-        completed: isDone(ej.id),
       };
 
       sets.forEach((s) => {
@@ -871,17 +823,6 @@ const RutinaGym: React.FC = () => {
   const filledSets = (id: string | undefined, series: Series) =>
     getSets(id, series).filter(isFilled);
 
-  const clearEmptySets = (id: string | undefined, _series: Series) => {
-    const k = keyFor(id);
-    const entry = ensureEntry(k);
-    let current = (entry.sets ?? []).slice();
-    current = current.filter((s) => isFilled(s));
-    if (current.length === 0) {
-      current = [{ peso: "", reps: "", rir: "", note: "" }];
-    }
-    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
-  };
-
   const setAltName = (id: string | undefined, alt: string | undefined) => {
     const k = keyFor(id);
     const entry = ensureEntry(k);
@@ -898,23 +839,6 @@ const RutinaGym: React.FC = () => {
     const alt = entry && "alt" in entry ? entry.alt : undefined;
     return alt && alt.trim() ? alt.trim() : ej.nombre;
   };
-
-  const completedCount = day.ejercicios.reduce((acc, e) => acc + (isDone(e.id) ? 1 : 0), 0);
-
-  const currentVolume = (() => {
-    let total = 0;
-
-    day.ejercicios.forEach((ej) => {
-      const sets = filledSets(ej.id, ej.series);
-      sets.forEach((s) => {
-        const peso = parseFloat(s.peso || "0");
-        const reps = parseFloat(s.reps || "0");
-        total += peso * reps;
-      });
-    });
-
-    return Math.round(total);
-  })();
 
   // =======================
   // 5. RENDER
@@ -939,24 +863,7 @@ const RutinaGym: React.FC = () => {
               </button>
 
               <div className="flex-1 text-center mx-2">
-                <h1 className="text-white font-bold text-lg capitalize">{selectedDay}</h1>
-                <div className="text-slate-300 text-sm mt-1">
-                  {day.nombre.split(" - ")[1] ||
-                    day.nombre.replace(
-                      `${selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1)} - `,
-                      ""
-                    )}
-                </div>
-                <div className="flex justify-center items-center gap-1 mt-2">
-                  {dias.map((dia) => (
-                    <div
-                      key={dia}
-                      className={`w-1.5 h-1.5 rounded-full transition-all ${
-                        selectedDay === dia ? "bg-white scale-125" : "bg-slate-600"
-                      }`}
-                    />
-                  ))}
-                </div>
+                <h1 className="text-white font-bold text-lg uppercase">{selectedDay}</h1>
               </div>
 
               <button
@@ -967,46 +874,27 @@ const RutinaGym: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex items-center gap-1 bg-emerald-800/80 rounded-full px-2 py-1">
-                  <span className="text-emerald-200">🟢</span>
-                  <span className="text-white font-semibold">
-                    {completedCount}/{day.ejercicios.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 bg-blue-800/80 rounded-full px-2 py-1">
-                  <span className="text-white font-semibold">{currentVolume} kg</span>
-                </div>
-                <div className="flex items-center gap-1 bg-slate-800 rounded-full px-2 py-1">
-                  <span className="text-slate-300">{elapsedMin}m</span>
-                </div>
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-slate-600">
+                <span className="text-white font-semibold text-sm">Peso</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={bodyWeight}
+                  onChange={(e) => setBodyWeight(e.target.value)}
+                  placeholder="kg"
+                  className="w-16 text-center bg-slate-700 text-white font-bold border-0 rounded text-sm py-1"
+                />
+                {bodyWeight && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
               </div>
 
-              <div className="flex items-center gap-1">
-                <div className="relative">
-                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-slate-600">
-                    <span className="text-white font-semibold text-sm">Peso</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={bodyWeight}
-                      onChange={(e) => setBodyWeight(e.target.value)}
-                      placeholder="kg"
-                      className="w-16 text-center bg-slate-700 text-white font-bold border-0 rounded text-sm py-1"
-                    />
-                    {bodyWeight && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowHistory(!showHistory)}
-                  className="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 rounded transition-all"
-                  title="Historial"
-                >
-                  <span className="text-slate-300 text-sm">📊</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 rounded transition-all"
+                title="Historial"
+              >
+                <span className="text-slate-300 text-sm">📊</span>
+              </button>
             </div>
           </div>
 
@@ -1073,20 +961,10 @@ const RutinaGym: React.FC = () => {
                             if (!originalEx) return null;
 
                             return (
-                              <div
-                                key={exId}
-                                className={`p-2 rounded-lg ${
-                                  exData.completed ? "bg-slate-700" : "bg-slate-700/50"
-                                }`}
-                              >
+                              <div key={exId} className="p-2 rounded-lg bg-slate-700/70">
                                 <div className="flex justify-between items-start">
                                   <div>
-                                    <span
-                                      className={exData.completed ? "text-white" : "text-slate-400"}
-                                    >
-                                      {exData.completed ? "✅" : "○"}{" "}
-                                      {exData.alt || originalEx.nombre}
-                                    </span>
+                                    <span className="text-white">{exData.alt || originalEx.nombre}</span>
                                     <div className="text-slate-300 text-xs mt-1 font-mono">
                                       {exData.sets.map((s, i) => (
                                         <span key={i} className="mr-2">
@@ -1116,7 +994,6 @@ const RutinaGym: React.FC = () => {
         <div className="space-y-3 px-2 mt-3 mb-16">
           {day.ejercicios.map((ej, idx) => {
             const colors = colorLegend[ej.grupo];
-            const checked = isDone(ej.id);
             const isExpanded = expandedExercise === ej.id;
             const sets = getSets(ej.id, ej.series);
             const filledCount = filledSets(ej.id, ej.series).length;
@@ -1132,47 +1009,38 @@ const RutinaGym: React.FC = () => {
               >
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleDone(ej.id)}
-                        className="w-5 h-5 mt-0.5 flex-shrink-0"
-                      />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-mono text-slate-600 bg-white/50 px-1.5 py-0.5 rounded">
+                          E{idx + 1}
+                        </span>
+                        <span
+                          className={`font-semibold text-sm leading-tight ${colors.text} break-words`}
+                        >
+                          {displayName(ej)}
+                        </span>
+                      </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-mono text-slate-600 bg-white/50 px-1.5 py-0.5 rounded">
-                            E{idx + 1}
+                      <div className="flex flex-wrap gap-3 text-xs text-slate-700">
+                        <span className="font-bold">{ej.series}s</span>
+                        <span className="font-mono">{ej.reps}r</span>
+                        {filledCount > 0 && (
+                          <span className="bg-white/50 px-1.5 py-0.5 rounded font-semibold">
+                            {filledCount}✅
                           </span>
-                          <span
-                            className={`font-semibold text-sm leading-tight ${colors.text} break-words`}
-                          >
-                            {displayName(ej)}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-xs text-slate-700">
-                          <span className="font-bold">{ej.series}s</span>
-                          <span className="font-mono">{ej.reps}r</span>
-                          {filledCount > 0 && (
-                            <span className="bg-white/50 px-1.5 py-0.5 rounded font-semibold">
-                              {filledCount}✅
-                            </span>
-                          )}
-                        </div>
-
-                        {previousSession?.exercises[ej.id!] && (
-                          <div className="text-[10px] text-slate-500 mt-1">
-                            ← Prev:{" "}
-                            {previousSession.exercises[ej.id!].sets
-                              .slice(0, 2)
-                              .map((s) => `${s.peso}×${s.reps}`)
-                              .join(" ")}
-                            {previousSession.exercises[ej.id!].sets.length > 2 && "..."}
-                          </div>
                         )}
                       </div>
+
+                      {previousSession?.exercises[ej.id!] && (
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          ← Prev:{" "}
+                          {previousSession.exercises[ej.id!].sets
+                            .slice(0, 2)
+                            .map((s) => `${s.peso}×${s.reps}`)
+                            .join(" ")}
+                          {previousSession.exercises[ej.id!].sets.length > 2 && "..."}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -1333,18 +1201,6 @@ const RutinaGym: React.FC = () => {
                         })}
                       </div>
                       <div className="flex flex-wrap gap-2 justify-center pt-2">
-                        <button
-                          onClick={() => clearEmptySets(ej.id, ej.series)}
-                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
-                        >
-                          🗑️ Limpiar vacías
-                        </button>
-                        <button
-                          onClick={() => openOneRMFor(ej.id)}
-                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
-                        >
-                          🧮 Calcular 1RM
-                        </button>
                         <button
                           onClick={() => {
                             setSelectorOpen({
@@ -1612,95 +1468,6 @@ const RutinaGym: React.FC = () => {
         </div>
       )}
 
-      {oneRMModal.open && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 safe-area-top safe-area-bottom"
-          style={{ zIndex: 10000 }}
-        >
-          <div className="w-full max-w-md bg-slate-800 rounded-xl p-4 border border-slate-700">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-white font-bold text-sm">🧮 Calculadora 1RM (Epley)</h3>
-              <button
-                onClick={() => setOneRMModal({ open: false })}
-                className="text-slate-300 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid gap-2">
-              <label className="text-slate-300 text-xs">Peso (kg)</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={oneRMModal.currentWeight ?? ""}
-                onChange={(e) =>
-                  setOneRMModal((s) => ({
-                    ...s,
-                    currentWeight: e.target.value,
-                  }))
-                }
-                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
-                placeholder="kg"
-              />
-
-              <label className="text-slate-300 text-xs">Repeticiones realizadas</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                value={oneRMModal.currentReps ?? ""}
-                onChange={(e) => setOneRMModal((s) => ({ ...s, currentReps: e.target.value }))}
-                className="w-full px-3 py-2 rounded bg-white/90 text-slate-800"
-                placeholder="reps"
-              />
-
-              <div className="bg-slate-700 rounded p-3 text-center">
-                {(() => {
-                  const res = computeEpley(oneRMModal.currentWeight, oneRMModal.currentReps);
-                  if (!res) {
-                    return (
-                      <div className="text-slate-300 text-sm">
-                        Introduce peso y repeticiones válidas para ver el 1RM
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="text-left">
-                      <div className="text-white font-bold text-lg mb-2">
-                        Estimado 1RM: {res.oneRM} kg
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
-                        <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          50% → <span className="font-semibold text-white">{res.p50} kg</span>
-                        </div>
-                        <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          70% → <span className="font-semibold text-white">{res.p70} kg</span>
-                        </div>
-                        <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          80% → <span className="font-semibold text-white">{res.p80} kg</span>
-                        </div>
-                        <div className="p-2 bg-slate-800 rounded border border-slate-600">
-                          90% → <span className="font-semibold text-white">{res.p90} kg</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setOneRMModal({ open: false })}
-                  className="px-3 py-1 rounded bg-indigo-600 text-white text-sm"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <style>{`
       body {
         margin: 0;
@@ -1802,25 +1569,6 @@ button {
 `}</style>
     </div>
   );
-};
-
-const computeEpley = (weightStr?: string, repsStr?: string) => {
-  const weight = parseFloat((weightStr ?? "").toString().replace(",", "."));
-  const reps = parseInt((repsStr ?? "").toString(), 10);
-
-  if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) {
-    return null;
-  }
-
-  const oneRM = weight * (1 + reps / 30);
-
-  return {
-    oneRM: Math.round(oneRM * 10) / 10,
-    p50: Math.round(oneRM * 0.5 * 10) / 10,
-    p70: Math.round(oneRM * 0.7 * 10) / 10,
-    p80: Math.round(oneRM * 0.8 * 10) / 10,
-    p90: Math.round(oneRM * 0.9 * 10) / 10,
-  };
 };
 
 export default RutinaGym;
