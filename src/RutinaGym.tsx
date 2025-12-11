@@ -40,6 +40,7 @@ const RutinaGym: React.FC = () => {
   const [bodyWeight, setBodyWeight] = useState<string>("");
   const [exerciseNotesOpen, setExerciseNotesOpen] = useState<Record<string, boolean>>({});
   const [setNotesOpen, setSetNotesOpen] = useState<Record<string, Record<number, boolean>>>({});
+  const [pendingDeleteSet, setPendingDeleteSet] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState<{
     open: boolean;
     targetId?: string;
@@ -1225,6 +1226,8 @@ const RutinaGym: React.FC = () => {
                           const isFallo = s.fallo === true;
                           const [rirMin, rirMax] = isFallo ? [null, null] : parseRIR(s.rir);
                           const setNoteOpen = setNotesOpen[ej.id!]?.[sidx] ?? false;
+                          const setKey = `${ej.id}-${sidx}`;
+                          const isPendingDelete = pendingDeleteSet === setKey;
                           return (
                             <div key={sidx} className="space-y-1">
                               <div
@@ -1322,26 +1325,21 @@ const RutinaGym: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const hasReps = !!(s.reps && s.reps.toString().trim());
-                                      const hasPeso = !!(s.peso && s.peso.toString().trim());
-                                      const hasRir = !!(s.rir && s.rir.toString().trim());
-                                      const hasNote = !!(s.note && s.note.toString().trim());
-                                      const hasFallo = s.fallo === true;
-                                      const hasData = hasReps || hasPeso || hasRir || hasNote || hasFallo;
-
-                                      if (hasData) {
-                                        const ok = confirm(
-                                          "¿Eliminar esta serie? Los datos de esta serie se perderán."
-                                        );
-                                        if (!ok) return;
+                                      if (isPendingDelete) {
+                                        removeSet(ej.id, sidx);
+                                        setPendingDeleteSet(null);
+                                      } else {
+                                        setPendingDeleteSet(setKey);
                                       }
-
-                                      removeSet(ej.id, sidx);
                                     }}
-                                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/70 hover:bg-white border border-slate-300 text-xs text-slate-700"
+                                    className={`w-7 h-7 flex items-center justify-center rounded-full border text-xs transition-colors ${
+                                      isPendingDelete
+                                        ? "bg-red-500 text-white border-red-600 hover:bg-red-600"
+                                        : "bg-white/70 hover:bg-white border-slate-300 text-slate-700"
+                                    }`}
                                     title="Eliminar serie"
                                   >
-                                    🗑
+                                    {isPendingDelete ? "✔️" : "🗑"}
                                   </button>
                                 </div>
                               </div>
