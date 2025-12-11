@@ -379,7 +379,7 @@ const RutinaGym: React.FC = () => {
           if (setIndex < sets.length - 1) {
             return `${exerciseId}-${setIndex + 1}-reps`;
           } else {
-            setTimeout(() => addSet(exerciseId), 50);
+            setTimeout(() => duplicateSet(exerciseId), 50);
             return `${exerciseId}-${setIndex + 1}-reps`;
           }
         default:
@@ -810,7 +810,7 @@ const RutinaGym: React.FC = () => {
     });
   };
 
-  const addSet = (id: string | undefined) => {
+  const duplicateSet = (id: string | undefined) => {
     if (!id) return;
     const k = keyFor(id);
     const entry = ensureEntry(k);
@@ -823,6 +823,28 @@ const RutinaGym: React.FC = () => {
       rir: hasPrevious ? last.rir ?? "" : "",
       note: hasPrevious ? last.note ?? "" : "",
       fallo: hasPrevious ? last.fallo ?? false : false,
+    });
+    const newIndex = current.length - 1;
+    setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
+
+    setTimeout(() => {
+      const nextInputId = `${id}-${newIndex}-reps`;
+      const nextInput = document.getElementById(nextInputId);
+      nextInput?.focus();
+    }, 0);
+  };
+
+  const addEmptySet = (id: string | undefined) => {
+    if (!id) return;
+    const k = keyFor(id);
+    const entry = ensureEntry(k);
+    const current = normalizeSets(entry.sets);
+    current.push({
+      peso: "",
+      reps: "",
+      rir: "",
+      note: "",
+      fallo: false,
     });
     const newIndex = current.length - 1;
     setLogs((prev) => ({ ...prev, [k]: { ...entry, sets: current } }));
@@ -1148,6 +1170,19 @@ const RutinaGym: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       <button
+                          onClick={() => {
+                            setSelectorOpen({
+                              open: true,
+                              targetId: ej.id,
+                              grupo: ej.grupo,
+                              mode: "replace",
+                            });
+                          }}
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-xs"
+                        >
+                          🔄
+                        </button>
+                      <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1168,16 +1203,22 @@ const RutinaGym: React.FC = () => {
                 {isExpanded && (
                   <div className="px-4 pb-4 border-t border-white/20 pt-4 space-y-4">
                     <div className="space-y-3">
+                                         {isExerciseNoteOpen && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Notas del ejercicio
+                        </label>
+                        <textarea
+                          className="w-full text-xs bg-white/80 border border-slate-300 rounded-md p-2 resize-none"
+                          rows={2}
+                          value={exerciseNote}
+                          onChange={(e) => setExerciseNote(ej.id!, e.target.value)}
+                          placeholder="Escribí aquí tus notas para este ejercicio..."
+                        />
+                      </div>
+                    )}
                       <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-slate-700 text-sm">Series realizadas:</h4>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => addSet(ej.id)}
-                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
-                          >
-                            + Serie
-                          </button>
-                        </div>
                       </div>
                       <div className="space-y-2">
                         {sets.map((s, sidx) => {
@@ -1321,35 +1362,19 @@ const RutinaGym: React.FC = () => {
                       </div>
                       <div className="flex flex-wrap gap-2 justify-center pt-2">
                         <button
-                          onClick={() => {
-                            setSelectorOpen({
-                              open: true,
-                              targetId: ej.id,
-                              grupo: ej.grupo,
-                              mode: "replace",
-                            });
-                          }}
-                          className="px-3 py-2 text-xs bg-white/70 rounded border border-slate-400"
-                        >
-                          🔄 Reemplazar
-                        </button>
+                            onClick={() => duplicateSet(ej.id)}
+                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                          >
+                            ⧉
+                          </button>
+                          <button
+                            onClick={() => addEmptySet(ej.id)}
+                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                          >
+                            +
+                          </button>
                       </div>
                     </div>
-
-                    {isExerciseNoteOpen && (
-                      <div className="mt-3">
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">
-                          Notas del ejercicio
-                        </label>
-                        <textarea
-                          className="w-full text-xs bg-white/80 border border-slate-300 rounded-md p-2 resize-none"
-                          rows={3}
-                          value={exerciseNote}
-                          onChange={(e) => setExerciseNote(ej.id!, e.target.value)}
-                          placeholder="Escribí aquí tus notas para este ejercicio..."
-                        />
-                      </div>
-                    )}
 
                     <div className="flex gap-2 justify-center pt-2">
                       <button
@@ -1357,14 +1382,14 @@ const RutinaGym: React.FC = () => {
                         className="px-3 py-1 text-xs bg-white/70 rounded border border-slate-400"
                         disabled={idx === 0}
                       >
-                        ↑ Subir
+                        ↑
                       </button>
                       <button
                         onClick={() => moveExercise(selectedDay, ej.id!, "down")}
                         className="px-3 py-1 text-xs bg-white/70 rounded border border-slate-400"
                         disabled={idx === day.ejercicios.length - 1}
                       >
-                        ↓ Bajar
+                        ↓
                       </button>
                       <button
                         onClick={() => {
@@ -1373,7 +1398,7 @@ const RutinaGym: React.FC = () => {
                         }}
                         className="px-3 py-1 text-xs bg-red-500 text-white rounded"
                       >
-                        🗑 Eliminar
+                        🗑
                       </button>
                     </div>
                   </div>
