@@ -53,6 +53,7 @@ const RutinaGym: React.FC = () => {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [rutinaState, setRutinaState] = useState<typeof rutina | null>(null);
+  const [pendingDeleteHistoryId, setPendingDeleteHistoryId] = useState<string | null>(null);
   // small ref counter so multiple independent loads don't race to set loading=false
   const pendingLoadsRef = useRef<number>(2);
 
@@ -147,7 +148,7 @@ const RutinaGym: React.FC = () => {
 
   // Guardar historial
   useEffect(() => {
-    if (!isLoading && history.length > 0) {
+    if (!isLoading) {
       saveToDB(STORAGE_HISTORY, history);
     }
   }, [history, isLoading]);
@@ -166,6 +167,12 @@ const RutinaGym: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("rg-selectedDay", selectedDay);
   }, [selectedDay]);
+
+  useEffect(() => {
+    if (!showHistory) {
+      setPendingDeleteHistoryId(null);
+    }
+  }, [showHistory]);
 
   // Auto-focus y sugerencias cuando se abre el selector
   useEffect(() => {
@@ -258,6 +265,10 @@ const RutinaGym: React.FC = () => {
   // =======================
 
   const day = rutinaState[selectedDay];
+
+  const getSessionId = (session: WorkoutSession): string => {
+    return (session as any).id ?? session.date;
+  };
 
   const parseRIR = (rirStr?: string): [number | null, number | null] => {
     if (!rirStr || !rirStr.trim()) return [null, null];
@@ -641,22 +652,52 @@ const RutinaGym: React.FC = () => {
 
   const keyFor = (id?: string) => `${selectedDay}:${id ?? ""}`;
 
-  const resetDay = () => {
-    console.log("🧹 Limpiando día:", selectedDay);
+  const resetCurrentDay = (opts?: { preserveCustomExercises?: boolean }) => {
+    const dayKey = selectedDay;
+    console.log("🧹 Limpiando día:", dayKey);
 
     setLogs((prev) => {
       const copy = { ...prev };
       Object.keys(copy).forEach((k) => {
-        if (k.startsWith(`${selectedDay}:`)) {
+        if (k.startsWith(`${dayKey}:`)) {
           delete copy[k];
         }
       });
       return copy;
     });
 
-    setExerciseNotesOpen({});
-    setSetNotesOpen({});
+    setExerciseNotesOpen((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((exId) => {
+        if (exId.startsWith(`${dayKey}-`)) {
+          delete next[exId];
+        }
+      });
+      return next;
+    });
 
+    setSetNotesOpen((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((exId) => {
+        if (exId.startsWith(`${dayKey}-`)) {
+          delete next[exId];
+        }
+      });
+      return next;
+    });
+
+    if (!opts?.preserveCustomExercises) {
+      setRutinaState((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          [dayKey]: withIds(rutina[dayKey], dayKey),
+        };
+      });
+    }
+
+    setExpandedExercise(null);
+    setPendingDeleteSet(null);
     setBodyWeight("");
     sessionStartTimeRef.current = Date.now();
     console.log("✅ Día limpiado completamente");
@@ -697,7 +738,7 @@ const RutinaGym: React.FC = () => {
     };
 
     setHistory((prev) => [newSession, ...prev]);
-    resetDay();
+    resetCurrentDay({ preserveCustomExercises: true });
 
     alert(
       `✅ Sesión guardada!\n\nVolumen total: ${Math.round(
@@ -1022,95 +1063,124 @@ const RutinaGym: React.FC = () => {
         </div>
 
         {showHistory && (
-          <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 p-0 md:items-center md:p-4">
-            <div className="bg-slate-900 rounded-t-3xl md:rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-700">
-              <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-bold text-lg">📊 Historial</h3>
-                  <button
-                    onClick={() => setShowHistory(false)}
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white text-lg"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="flex justify-center mt-2 md:hidden">
-                  <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
-                </div>
-              </div>
+  <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 p-0 md:items-center md:p-4">
+    <div className="bg-slate-900 rounded-t-3xl md:rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-700">
+      <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900 rounded-t-3xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-white font-bold text-lg">📊 Historial</h3>
+          <button
+            onClick={() => setShowHistory(false)}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white text-lg"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex justify-center mt-2 md:hidden">
+          <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
+        </div>
+      </div>
 
-              <div className="flex-1 overflow-y-auto p-4">
-                {history.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    Aún no hay sesiones guardadas
+      <div className="flex-1 overflow-y-auto p-4">
+        {history.length === 0 ? (
+          <div className="text-center py-8 text-slate-400">
+            Aún no hay sesiones guardadas
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {history.map((session, idx) => {
+              const sessionId = getSessionId(session);
+              const isPendingDeleteHistory = pendingDeleteHistoryId === sessionId;
+
+              const handleHistoryDeleteTap = () => {
+                if (isPendingDeleteHistory) {
+                  setHistory((prev) => prev.filter((s) => getSessionId(s) !== sessionId));
+                  setPendingDeleteHistoryId(null);
+                } else {
+                  setPendingDeleteHistoryId(sessionId);
+                }
+              };
+
+              return (
+                <div
+                  key={sessionId || idx}
+                  className="bg-slate-800 rounded-xl p-4 border border-slate-700"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="text-white font-semibold capitalize">
+                        {session.day} - {new Date(session.date).toLocaleDateString("es-AR")}
+                      </h4>
+                     <div className="flex gap-3 mt-1 text-sm text-slate-300 flex-wrap">
+                        <span>💪 {session.totalVolume || "-"} kg</span>
+                        <span>⏱️ {session.duration || "-"} min</span>
+                        <span>⚖️ {session.bodyWeight || "-"} kg</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleHistoryDeleteTap();
+                      }}
+                      className={`w-8 h-8 flex items-center justify-center rounded-full border text-xs transition-colors ${
+                        isPendingDeleteHistory
+                          ? "bg-red-500 text-white border-red-600 hover:bg-red-600"
+                          : "bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600"
+                      }`}
+                      title="Eliminar sesión"
+                    >
+                      {isPendingDeleteHistory ? "✓" : "🗑️"}
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {history.map((session, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-slate-800 rounded-xl p-4 border border-slate-700"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h4 className="text-white font-semibold capitalize">
-                              {session.day} - {new Date(session.date).toLocaleDateString("es-AR")}
-                            </h4>
-                            <div className="flex gap-3 mt-1 text-sm text-slate-300 flex-wrap">
-                              <span>💪 {session.totalVolume} kg</span>
-                              {session.duration && <span>⏱️ {session.duration} min</span>}
-                              {session.bodyWeight && <span>⚖️ {session.bodyWeight} kg</span>}
+
+                  <div className="space-y-2">
+                    {Object.entries(session.exercises).map(([exId, exData]) => {
+                      const dayRutina = rutinaState[session.day as keyof typeof rutinaState];
+
+                      // Si por alguna razón esta sesión tiene un "day" que ya no existe en la rutina actual,
+                      // nos salteamos ese ejercicio para no romper todo.
+                      if (!dayRutina) {
+                        console.warn("Sesión con día desconocido en history:", session.day);
+                        return null;
+                      }
+
+                      const originalEx = dayRutina.ejercicios.find((e) => e.id === exId);
+                      if (!originalEx) return null;
+
+                      return (
+                        <div key={exId} className="p-2 rounded-lg bg-slate-700/70">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-white">{exData.alt || originalEx.nombre}</span>
+                              <div className="text-slate-300 text-xs mt-1 font-mono">
+                                {normalizeSets(exData.sets).map((s, i) => {
+                                  const rirText = s.fallo ? "F" : s.rir;
+                                  return (
+                                    <span key={i} className="mr-2">
+                                      {s.peso}×{s.reps}
+                                      {rirText ? `(${rirText})` : ""}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
+                            {exData.notes && (
+                              <span className="text-slate-400 text-xs italic">📝</span>
+                            )}
                           </div>
                         </div>
-
-                        <div className="space-y-2">
-                          {Object.entries(session.exercises).map(([exId, exData]) => {
-                            const dayRutina = rutinaState[session.day as keyof typeof rutinaState];
-
-                            // Si por alguna razón esta sesión tiene un "day" que ya no existe en la rutina actual,
-                            // nos salteamos ese ejercicio para no romper todo.
-                            if (!dayRutina) {
-                              console.warn("Sesión con día desconocido en history:", session.day);
-                              return null;
-                            }
-
-                            const originalEx = dayRutina.ejercicios.find((e) => e.id === exId);
-                            if (!originalEx) return null;
-
-                            return (
-                              <div key={exId} className="p-2 rounded-lg bg-slate-700/70">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <span className="text-white">{exData.alt || originalEx.nombre}</span>
-                                    <div className="text-slate-300 text-xs mt-1 font-mono">
-                                      {normalizeSets(exData.sets).map((s, i) => {
-                                        const rirText = s.fallo ? "F" : s.rir;
-                                        return (
-                                          <span key={i} className="mr-2">
-                                            {s.peso}×{s.reps}
-                                            {rirText ? `(${rirText})` : ""}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                  {exData.notes && (
-                                    <span className="text-slate-400 text-xs italic">📝</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
+    </div>
+  </div>
+)}
 
         <div className="space-y-3 px-2 mt-3 mb-16">
           {day.ejercicios.map((ej, idx) => {
@@ -1470,6 +1540,20 @@ const RutinaGym: React.FC = () => {
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold text-xs transition-all active:scale-95"
               >
                 ✓ FINALIZAR
+              </button>
+
+              <button
+                onClick={() => {
+                  const confirmed = window.confirm(
+                    "¿Borrar todos los datos del día actual y resetearlo?"
+                  );
+                  if (!confirmed) return;
+                  resetCurrentDay();
+                }}
+                className="w-10 h-10 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all"
+                title="Resetear el día (borra series, notas y ejercicios agregados hoy)"
+              >
+                RST
               </button>
 
               <button
