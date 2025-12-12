@@ -863,7 +863,7 @@ const RutinaGym: React.FC = () => {
       peso: hasPrevious ? last.peso ?? "" : "",
       reps: hasPrevious ? last.reps ?? "" : "",
       rir: hasPrevious ? last.rir ?? "" : "",
-      note: hasPrevious ? last.note ?? "" : "",
+      note: "",
       fallo: hasPrevious ? last.fallo ?? false : false,
     });
     const newIndex = current.length - 1;
@@ -1249,7 +1249,7 @@ const RutinaGym: React.FC = () => {
                               mode: "replace",
                             });
                           }}
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-xs"
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-base md:text-lg"
                         >
                           🔄
                         </button>
@@ -1262,7 +1262,7 @@ const RutinaGym: React.FC = () => {
                             [ej.id!]: !prev[ej.id!],
                           }));
                         }}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-xs"
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 border border-slate-300 text-base md:text-lg"
                         title="Notas del ejercicio"
                       >
                         🗒️
@@ -1298,12 +1298,14 @@ const RutinaGym: React.FC = () => {
                           const setNoteOpen = setNotesOpen[ej.id!]?.[sidx] ?? false;
                           const setKey = `${ej.id}-${sidx}`;
                           const isPendingDelete = pendingDeleteSet === setKey;
+                          const isEmptySet =
+                            (!s.reps || s.reps === "") && (!s.peso || s.peso === "");
                           return (
                             <div key={sidx} className="space-y-1">
                               <div
-                                className={`grid grid-cols-[auto_1fr_1fr_auto] items-center gap-1.5 md:gap-2 rounded-lg p-1.5 md:p-2 border ${
+                                className={`grid grid-cols-[auto_minmax(2rem,1fr)_minmax(2rem,1fr)_auto_auto_auto_auto_auto] items-center gap-1 rounded-lg px-1.5 py-1.5 border ${
                                   isFallo ? "bg-amber-100 border-amber-300" : "bg-white/50 border-transparent"
-                                }`}
+                                } max-w-full`}
                               >
                                 <span className="text-xs md:text-sm font-semibold text-slate-700 w-6">
                                   {sidx + 1}.
@@ -1316,7 +1318,7 @@ const RutinaGym: React.FC = () => {
                                   placeholder="Reps"
                                   value={s.reps ?? ""}
                                   onChange={(e) => setSetValue(ej.id, sidx, "reps", e.target.value)}
-                                  className="w-full text-center bg-white rounded border-0 px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm font-semibold"
+                                  className="w-full min-w-[32px] h-8 text-center bg-white rounded border-0 text-base md:text-sm font-semibold"
                                 />
 
                                 <input
@@ -1326,14 +1328,14 @@ const RutinaGym: React.FC = () => {
                                   placeholder="Kg"
                                   value={s.peso ?? ""}
                                   onChange={(e) => setSetValue(ej.id, sidx, "peso", e.target.value)}
-                                  className="w-full text-center bg-white rounded border-0 px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm font-semibold"
+                                  className="w-full min-w-[32px] h-8 text-center bg-white rounded border-0 text-base md:text-sm font-semibold"
                                 />
 
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
                                     onClick={() => toggleFallo(ej.id, sidx)}
-                                    className={`w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full border text-[11px] md:text-xs ${
+                                    className={`w-10 h-10 md:w-11 md:h-11 flex items-center justify-center rounded-full border text-sm md:text-xs ${
                                       isFallo
                                         ? "bg-amber-300 border-amber-500 text-amber-900 font-bold"
                                         : "bg-white/70 border-slate-300 text-slate-700"
@@ -1343,20 +1345,20 @@ const RutinaGym: React.FC = () => {
                                     ⚡
                                   </button>
                                   <input
-                                    {...createInputProps(ej.id!, sidx, "rirMin")}
-                                    type="number"
-                                    inputMode="numeric"
-                                    placeholder="RIR"
-                                    value={isFallo ? "" : rirMin ?? ""}
+                                  {...createInputProps(ej.id!, sidx, "rirMin")}
+                                  type="number"
+                                  inputMode="numeric"
+                                  placeholder="RIR"
+                                  value={isFallo ? "" : rirMin ?? ""}
                                     onChange={(e) =>
                                       setSetValue(ej.id, sidx, "rirMin", e.target.value)
                                     }
                                     disabled={isFallo}
-                                    className={`w-12 text-center rounded border-0 px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm font-semibold ${
+                                    className={`w-full h-8 text-center rounded border-0 text-base md:text-sm font-semibold ${
                                       isFallo ? "bg-amber-50 text-amber-700" : "bg-white"
                                     }`}
                                   />
-                                  <span className="text-slate-600 text-xs">-</span>
+                                  <span className="text-slate-600 text-xs md:text-sm">-</span>
                                   <input
                                     {...createInputProps(ej.id!, sidx, "rirMax")}
                                     type="number"
@@ -1367,7 +1369,7 @@ const RutinaGym: React.FC = () => {
                                       setSetValue(ej.id, sidx, "rirMax", e.target.value)
                                     }
                                     disabled={isFallo}
-                                    className={`w-12 text-center rounded border-0 px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm font-semibold ${
+                                    className={`w-full h-8 text-center rounded border-0 text-base md:text-sm font-semibold ${
                                       isFallo ? "bg-amber-50 text-amber-700" : "bg-white"
                                     }`}
                                   />
@@ -1387,7 +1389,7 @@ const RutinaGym: React.FC = () => {
                                         };
                                       });
                                     }}
-                                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/70 hover:bg-white border border-slate-300 text-xs"
+                                    className="w-10 h-10 md:w-11 md:h-11 flex items-center justify-center rounded-full bg-white/70 hover:bg-white border border-slate-300 text-sm md:text-xs"
                                     title="Notas de esta serie"
                                   >
                                     💬
@@ -1395,6 +1397,10 @@ const RutinaGym: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      if (isEmptySet) {
+                                        removeSet(ej.id, sidx);
+                                        return;
+                                      }
                                       if (isPendingDelete) {
                                         removeSet(ej.id, sidx);
                                         setPendingDeleteSet(null);
@@ -1402,7 +1408,7 @@ const RutinaGym: React.FC = () => {
                                         setPendingDeleteSet(setKey);
                                       }
                                     }}
-                                    className={`w-7 h-7 flex items-center justify-center rounded-full border text-xs transition-colors ${
+                                    className={`w-10 h-10 md:w-11 md:h-11 flex items-center justify-center rounded-full border text-sm md:text-xs transition-colors ${
                                       isPendingDelete
                                         ? "bg-red-500 text-white border-red-600 hover:bg-red-600"
                                         : "bg-white/70 hover:bg-white border-slate-300 text-slate-700"
@@ -1431,13 +1437,13 @@ const RutinaGym: React.FC = () => {
                       <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center pt-1.5 md:pt-2">
                         <button
                             onClick={() => duplicateSet(ej.id)}
-                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                            className="px-2 py-1 text-lg bg-white/70 rounded border border-slate-400"
                           >
                             ⧉
                           </button>
                           <button
                             onClick={() => addEmptySet(ej.id)}
-                            className="px-2 py-1 text-xs bg-white/70 rounded border border-slate-400"
+                            className="px-2 py-1 text-lg bg-white/70 rounded border border-slate-400"
                           >
                             +
                           </button>
@@ -1447,14 +1453,14 @@ const RutinaGym: React.FC = () => {
                     <div className="flex gap-1.5 md:gap-2 justify-center pt-1.5 md:pt-2">
                       <button
                         onClick={() => moveExercise(selectedDay, ej.id!, "up")}
-                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-xs md:text-sm bg-white/70 rounded border border-slate-400"
+                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-lg md:text-sm bg-white/70 rounded border border-slate-400"
                         disabled={idx === 0}
                       >
                         ↑
                       </button>
                       <button
                         onClick={() => moveExercise(selectedDay, ej.id!, "down")}
-                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-xs md:text-sm bg-white/70 rounded border border-slate-400"
+                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-lg md:text-sm bg-white/70 rounded border border-slate-400"
                         disabled={idx === day.ejercicios.length - 1}
                       >
                         ↓
@@ -1464,7 +1470,7 @@ const RutinaGym: React.FC = () => {
                           if (!confirm("¿Eliminar ejercicio de la rutina?")) return;
                           removeExercise(selectedDay, ej.id!);
                         }}
-                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-xs md:text-sm bg-red-500 text-white rounded"
+                        className="px-2.5 py-1 md:px-3 md:py-1.5 text-lg md:text-sm bg-red-500 text-white rounded"
                       >
                         🗑
                       </button>
